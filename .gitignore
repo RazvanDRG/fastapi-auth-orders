@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# Env
+.env
+.env.*
+
+# Docker / DB
+pgdata/
+postgres-data/
+docker-data/
+
+# VS Code
+.vscode/
+
+# OS
+Thumbs.db
