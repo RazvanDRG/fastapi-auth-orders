@@ -10,11 +10,7 @@ from app.services.auth import hash_password, verify_password, create_access_toke
 from app.api.security import get_current_user
 
 
-router = APIRouter(prefix="/auth", tags=["auth"])
-
-@router.get("/ping")
-def ping():
-    return {"auth": "ok"}
+router = APIRouter(prefix="/auth", tags=["Login"])
 
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):

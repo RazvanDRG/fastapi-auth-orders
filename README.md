@@ -32,9 +32,14 @@ modules such as Orders and Role-Based Access Control (RBAC).
 
 ## Running locally
 ```bash
+http://localhost:8000/docs
+
+docker compose down
 docker compose up --build
 
-http://localhost:8000/docs
+http://localhost:8000/metrics
+
+docker compose ps -a
 
 ## Status
 Authentication features are complete. The project is structured to support

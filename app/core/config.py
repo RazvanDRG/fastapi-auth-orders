@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    app_name: str = "FastAPI Auth Orders"
+    app_name: str = "Warehouse Operations Service"
     database_url: str
     jwt_secret: str
     jwt_algorithm: str = "HS256"
