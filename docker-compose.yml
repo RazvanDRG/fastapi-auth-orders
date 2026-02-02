@@ -23,6 +23,8 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - .:/app  
     healthcheck:
       test: ["CMD-SHELL", "curl -fs http://localhost:8000/ops/ready || exit 1"]
       interval: 10s

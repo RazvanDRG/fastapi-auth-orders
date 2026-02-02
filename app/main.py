@@ -5,6 +5,7 @@ from app.db.base import Base
 
 from app.api.auth import router as auth_router
 from app.api.ops import ops_router
+from app.api.orders import router as orders_router
 
 from app.models import user, customer, product, order, order_item  # noqa: F401
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -20,8 +21,5 @@ Instrumentator().instrument(app).expose(
 
 app.include_router(ops_router)
 app.include_router(auth_router)
+app.include_router(orders_router)
 
-
-@app.on_event("startup")
-def on_startup():
-    Base.metadata.create_all(bind=engine)
