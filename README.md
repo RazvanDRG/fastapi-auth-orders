@@ -72,6 +72,11 @@ http://localhost:8000/docs
 
 docker compose down
 docker compose up --build
+
+docker compose exec api alembic history
+docker compose exec api alembic current
+
+docker compose exec api alembic revision --autogenerate -m "init schema"
 docker compose exec api alembic upgrade head
 
 

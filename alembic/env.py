@@ -4,6 +4,14 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from app.db.base import Base
+from app.db import models 
+
+from app.models.user import User
+from app.models.product import Product
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.refresh_token import RefreshToken
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
