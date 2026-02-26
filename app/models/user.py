@@ -1,6 +1,8 @@
-from sqlalchemy import Integer, String
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
+
+role = Column(String, nullable=False, default="operator")
 
 class User(Base):
     __tablename__ = "users"
