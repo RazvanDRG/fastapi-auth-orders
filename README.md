@@ -65,6 +65,13 @@ are more important than deleting failed business attempts.
 - JWT (python-jose)
 - Docker & Docker Compose
 
+## Observability & Audit
+
+- Middleware-ul cu X-Request-ID (request correlation)
+- Global exception handler with consistent error contract
+- OrderEvent audit trail for status transitions
+- Strict state machine enforcement (409 on invalid transitions)
+
 
 ## Running locally
 ```bash
