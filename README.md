@@ -72,22 +72,38 @@ are more important than deleting failed business attempts.
 - OrderEvent audit trail for status transitions
 - Strict state machine enforcement (409 on invalid transitions)
 
+## RBAC (Roles & Access)
+
+This service uses static roles stored in `users.role`:
+
+- **admin**: full access + operational metrics
+- **operator**: warehouse order workflow (reserve/pick/ship/cancel)
+- **service**: service-to-service access only (used by the future .NET Identity/Orders service)
+
+### Access Matrix
+
+|   Endpoint group   | admin | operator | service |
+|---|:---:|:---:|:---:|
+| `/orders/*`        | ✅ | ✅ | ❌ |
+| `/metrics`         | ✅ | ❌ | ❌ |
+| `/integrations/*`  | ❌ | ❌ | ✅ |
+| `/ops/*`           | ✅ | ✅ | ✅ |
 
 ## Running locally
-```bash
-http://localhost:8000/docs
 
+```bash
 docker compose down
 docker compose up --build
 
-docker compose exec api alembic history
-docker compose exec api alembic current
+# API docs
+# http://localhost:8000/docs
 
-docker compose exec api alembic revision --autogenerate -m "init schema"
+# Alembic
+docker compose exec api alembic current
 docker compose exec api alembic upgrade head
 
-
-http://localhost:8000/metrics
+# Metrics
+# http://localhost:8000/metrics
 
 docker compose ps -a
 

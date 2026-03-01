@@ -1,10 +1,12 @@
 # Python
 __pycache__/
 *.pyc
+alembic/__pycache__/
 
 # Env
 .env
 .env.*
+.venv/
 
 # Docker / DB
 pgdata/

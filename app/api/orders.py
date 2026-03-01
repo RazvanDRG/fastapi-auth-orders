@@ -18,7 +18,7 @@ from app.services.orders_service import (
 router = APIRouter(
     prefix="/orders",
     tags=["Orders"],
-    dependencies=[Depends(require_roles("admin", "operator", "service"))],
+    dependencies=[Depends(require_roles("admin", "operator"))],
 )
 
 

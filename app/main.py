@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from jose import jwt, JWTError
+
 
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -8,6 +10,7 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.ops import ops_router
 from app.api.orders import router as orders_router
+from app.api.integrations import router as integrations_router
 
 import time
 import uuid
@@ -24,6 +27,23 @@ async def request_id_middleware(request: Request, call_next):
 
     # Make it available everywhere (endpoints + exception handlers)
     request.state.request_id = rid
+
+        # ---- ADMIN-ONLY GUARD for /metrics (Prometheus Instrumentator exposes it publicly) ----
+    if request.url.path == "/metrics":
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "Missing Bearer token", "request_id": rid})
+
+        token = auth.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        except JWTError:
+            return JSONResponse(status_code=401, content={"detail": "Invalid token", "request_id": rid})
+
+        role = payload.get("role")
+        if role != "admin":
+            return JSONResponse(status_code=403, content={"detail": "Forbidden", "request_id": rid})
+    # -----------------------------------------------------------------------
 
     start = time.time()
     try:
@@ -89,4 +109,5 @@ Instrumentator().instrument(app).expose(
 app.include_router(ops_router)
 app.include_router(auth_router)
 app.include_router(orders_router)
+app.include_router(integrations_router)
 
