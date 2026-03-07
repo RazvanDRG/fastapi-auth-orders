@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Warehouse Operations Service"
@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     refresh_token_salt: str
 
-    class Config:
-        env_file = ".env"
+model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

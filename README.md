@@ -95,6 +95,10 @@ This service uses static roles stored in `users.role`:
 docker compose down
 docker compose up --build
 
+#Tests
+
+docker compose exec api pytest -q
+
 # API docs
 # http://localhost:8000/docs
 
