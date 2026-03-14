@@ -7,10 +7,10 @@ from jose import jwt, JWTError
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import settings
-from app.api.auth import router as auth_router
-from app.api.ops import ops_router
-from app.api.orders import router as orders_router
-from app.api.integrations import router as integrations_router
+from app.api.routes.auth import router as auth_router
+from app.api.routes.ops import ops_router
+from app.api.routes.orders import router as orders_router
+from app.api.routes.integrations import router as integrations_router
 
 import time
 import uuid

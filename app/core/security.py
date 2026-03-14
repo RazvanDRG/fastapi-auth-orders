@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.api.deps import get_db
+from app.db.session import get_db
 from app.models.user import User
 
 bearer = HTTPBearer(auto_error=False)

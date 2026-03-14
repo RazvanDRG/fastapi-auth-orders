@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.rbac import require_roles
+from app.core.rbac import require_roles
 from app.db.session import get_db
 from app.services.orders_service import get_order, reserve_stock_for_order, restock_for_order, transition
 from app.models.order import OrderStatus

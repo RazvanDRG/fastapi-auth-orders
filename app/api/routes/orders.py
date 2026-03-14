@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Body, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.rbac import require_roles
-from app.api.security import get_current_user
+from app.core.rbac import require_roles
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
