@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.core.roles import Roles
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 PRODUCT_ID = int(os.getenv("TEST_PRODUCT_ID", "1"))
@@ -172,3 +173,11 @@ def test_service_cannot_access_orders_but_can_use_integrations():
     # Depending on data/order state, business result may vary
     r = httpx.post(f"{BASE_URL}/integrations/orders/1/reserve", headers=auth_headers(svc_token), timeout=10)
     assert r.status_code in (200, 404, 409), r.text
+    
+    
+def test_operator_cannot_access_metrics():
+    wait_api()
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
+    token = login_access_token(OP_EMAIL, OP_PASS)
+    r = httpx.get(f"{BASE_URL}/metrics", headers=auth_headers(token), timeout=10)
+    assert r.status_code == 403, r.text

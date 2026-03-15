@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Response, Depends
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from app.api.rbac import require_roles
+from app.core.rbac import require_roles
+from app.core.roles import Roles
 
 
 router = APIRouter(
     prefix="/metrics",
     tags=["Ops"],
-    dependencies=[Depends(require_roles("admin"))],
+    dependencies=[Depends(require_roles(Roles.ADMIN))],
 )
 
 

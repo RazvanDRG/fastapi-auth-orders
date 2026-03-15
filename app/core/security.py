@@ -26,6 +26,7 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = db.scalar(select(User).where(User.email == email))
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    if not user or user.is_deleted:
+        raise HTTPException(status_code=401, detail="User inactive or deleted")
+            
     return user

@@ -5,11 +5,12 @@ from app.core.rbac import require_roles
 from app.db.session import get_db
 from app.services.orders_service import get_order, reserve_stock_for_order, restock_for_order, transition
 from app.models.order import OrderStatus
+from app.core.roles import Roles
 
 router = APIRouter(
     prefix="/integrations",
     tags=["Integrations"],
-    dependencies=[Depends(require_roles("service"))],
+    dependencies=[Depends(require_roles(Roles.SERVICE))],
 )
 
 @router.post("/orders/{order_id}/reserve")

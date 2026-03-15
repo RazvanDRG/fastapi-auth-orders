@@ -11,6 +11,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.ops import ops_router
 from app.api.routes.orders import router as orders_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.users import router as users_router
 
 import time
 import uuid
@@ -110,4 +111,4 @@ app.include_router(ops_router)
 app.include_router(auth_router)
 app.include_router(orders_router)
 app.include_router(integrations_router)
-
+app.include_router(users_router)

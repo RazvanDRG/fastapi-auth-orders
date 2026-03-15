@@ -8,6 +8,7 @@ from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
 from app.models.user import User
 from app.schemas.orders import OrderCreate, OrderOut
+from app.core.roles import Roles
 from app.services.orders_service import (
     get_order,
     reserve_stock_for_order,
@@ -18,7 +19,7 @@ from app.services.orders_service import (
 router = APIRouter(
     prefix="/orders",
     tags=["Orders"],
-    dependencies=[Depends(require_roles("admin", "operator"))],
+    dependencies=[Depends(require_roles(Roles.ADMIN, Roles.OPERATOR))],
 )
 
 

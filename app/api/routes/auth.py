@@ -9,7 +9,7 @@ from app.services.auth import hash_password, verify_password, create_access_toke
 from app.core.security import get_current_user
 from app.services.refresh_tokens import issue_refresh_token, rotate_refresh_token, revoke_refresh_token
 from app.services.auth import create_access_token
-
+from app.core.roles import Roles
 
 
 router = APIRouter(prefix="/auth", tags=["Login"])
@@ -25,7 +25,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=payload.email,
         hashed_password=hash_password(password),
-        role="operator",
+        role=Roles.OPERATOR,
     )
 
     db.add(user)
@@ -43,8 +43,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email))
 
     password = payload.password.strip()
-    if not user or not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    if not user or user.is_deleted or not verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
 
     access = create_access_token(subject=user.email)
 
