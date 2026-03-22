@@ -1,3 +1,6 @@
+Author: Razvan Dornea
+Built by: Razvan Dornea
+
 # FastAPI Auth & Orders API
 
 Backend API built with FastAPI and PostgreSQL, implementing secure JWT-based

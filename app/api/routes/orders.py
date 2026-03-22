@@ -34,7 +34,7 @@ def create_order(
     request: Request,
     payload: OrderCreate = Body(
         ...,
-        example={
+        examples={
             "customer_id": 1,
             "reference": "NL-ORDER-001",
             "items": [
