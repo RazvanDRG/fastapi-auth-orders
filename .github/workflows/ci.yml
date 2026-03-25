@@ -12,8 +12,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create .env from example
-        run: cp .env.example .env
+      - name: Create .env from exemple
+        run: cp .env.exemple .env
 
       - name: Build and start Docker containers
         run: docker compose up -d --build
