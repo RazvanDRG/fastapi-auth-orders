@@ -6,6 +6,7 @@ alembic/__pycache__/
 # Env
 .env
 .env.*
+!.env.example
 .venv/
 
 # Docker / DB
