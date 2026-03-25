@@ -94,7 +94,7 @@ def test_auth_me_requires_token():
 
 def test_happy_path_order_flow_operator():
     wait_api()
-    ensure_user_with_role(OP_EMAIL, OP_PASS, "operator")
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
     token = login_access_token(OP_EMAIL, OP_PASS)
 
     reference = f"NL-ORDER-TEST-{uuid.uuid4().hex[:8]}"
@@ -137,7 +137,7 @@ def test_happy_path_order_flow_operator():
 
 def test_strict_transition_start_pick_from_new_is_409():
     wait_api()
-    ensure_user_with_role(OP_EMAIL, OP_PASS, "operator")
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
     token = login_access_token(OP_EMAIL, OP_PASS)
 
     reference = f"NL-ORDER-TEST-{uuid.uuid4().hex[:8]}"
@@ -162,7 +162,7 @@ def test_strict_transition_start_pick_from_new_is_409():
 
 def test_service_cannot_access_orders_but_can_use_integrations():
     wait_api()
-    ensure_user_with_role(SVC_EMAIL, SVC_PASS, "service")
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
     svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
 
     # service must NOT access /orders/*
@@ -173,11 +173,91 @@ def test_service_cannot_access_orders_but_can_use_integrations():
     # Depending on data/order state, business result may vary
     r = httpx.post(f"{BASE_URL}/integrations/orders/1/reserve", headers=auth_headers(svc_token), timeout=10)
     assert r.status_code in (200, 404, 409), r.text
-    
-    
+
+
 def test_operator_cannot_access_metrics():
     wait_api()
     ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
     token = login_access_token(OP_EMAIL, OP_PASS)
+
     r = httpx.get(f"{BASE_URL}/metrics", headers=auth_headers(token), timeout=10)
     assert r.status_code == 403, r.text
+
+
+def test_soft_deleted_user_cannot_login():
+    wait_api()
+
+    email = f"deleted_{uuid.uuid4().hex[:6]}@example.com"
+    password = "pass1234"
+
+    ensure_user_with_role(email, password, Roles.OPERATOR)
+
+    # find user id
+    db = SessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        assert user is not None
+        user_id = user.id
+    finally:
+        db.close()
+
+    # create admin and soft-delete the user
+    admin_email = f"admin_{uuid.uuid4().hex[:6]}@example.com"
+    admin_pass = "pass1234"
+
+    ensure_user_with_role(admin_email, admin_pass, Roles.ADMIN)
+    admin_token = login_access_token(admin_email, admin_pass)
+
+    r = httpx.delete(
+        f"{BASE_URL}/users/{user_id}",
+        headers=auth_headers(admin_token),
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+
+    # deleted user should no longer be able to login
+    r = httpx.post(
+        f"{BASE_URL}/auth/login",
+        json={"email": email, "password": password},
+        timeout=10,
+    )
+    assert r.status_code == 401, r.text
+
+
+def test_cannot_delete_last_active_admin():
+    wait_api()
+
+    email = f"lastadmin_{uuid.uuid4().hex[:6]}@example.com"
+    password = "pass1234"
+
+    ensure_user_with_role(email, password, Roles.ADMIN)
+    token = login_access_token(email, password)
+
+    db = SessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        assert user is not None
+        user_id = user.id
+
+        # Make this user the only active admin
+        admins = db.scalars(
+            select(User).where(
+                User.role == Roles.ADMIN,
+                User.email != email,
+                User.is_deleted == False,
+            )
+        ).all()
+
+        for admin in admins:
+            admin.role = Roles.OPERATOR
+
+        db.commit()
+    finally:
+        db.close()
+
+    r = httpx.delete(
+        f"{BASE_URL}/users/{user_id}",
+        headers=auth_headers(token),
+        timeout=10,
+    )
+    assert r.status_code == 409, r.text

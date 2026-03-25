@@ -1,96 +1,141 @@
-Author: Razvan Dornea
-Built by: Razvan Dornea
+# Warehouse Operations Service (FastAPI)
 
-# FastAPI Auth & Orders API
+Backend service for warehouse order processing, built with FastAPI, SQLAlchemy, and PostgreSQL.
 
-Backend API built with FastAPI and PostgreSQL, implementing secure JWT-based
-authentication and a scalable, Dockerized backend architecture.
+This project simulates a real-world warehouse workflow:
+Order → Reserve → Pick → Ship
 
-## Overview
-This project implements a production-style authentication flow using modern
-backend best practices. It is designed to be easily extended with business
-modules such as Orders and Role-Based Access Control (RBAC).
+---
 
-## Warehouse Operations Service (Order & Inventory Flow)
+## 🚀 Features
 
-This service models a real-world warehouse order lifecycle, similar to WMS/OMS systems used in logistics and e-commerce.
+### Core Functionality
+- Order lifecycle management (create, reserve, pick, ship)
+- Stock reservation with transactional safety
+- Idempotent operations (retry-safe endpoints)
+- Audit trail for all state transitions
 
-### Business Flow
-1. Order is created (NEW)
-2. Stock is reserved atomically (RESERVED)
-3. Warehouse picking starts (PICKING)
-4. Picking is confirmed (PICKED)
-5. Order is shipped (SHIPPED)
-6. Orders can be cancelled at valid stages (CANCELLED)
+### Authentication & Security
+- JWT authentication (access + refresh tokens)
+- Role-Based Access Control (RBAC)
+  - `admin`
+  - `operator`
+  - `service`
+- Request ID middleware for traceability
+- Global exception handling
 
-### Key Design Decisions
-- Explicit order state machine with guarded transitions
-- Atomic stock reservation with rollback on failure
-- Idempotent reservation logic to prevent double booking
-- Clear separation of concerns:
-  - API layer (routers)
-  - Business logic (services)
-  - Persistence layer (SQLAlchemy ORM)
-- PostgreSQL constraints used as safety net (FK, enums)
+### Data Integrity (Enterprise-grade)
+- Soft delete for users (`is_deleted`, `deleted_at`)
+- Protection against deleting the last active admin (API level)
+- Protection against deleting the last active admin (DB trigger)
+- Role validation and access enforcement
 
-### Observability & Operations
-- Health checks (liveness / readiness)
-- Prometheus metrics endpoint (/metrics)
-- Docker healthchecks for DB and API
+### Observability
+- Structured logging with request correlation (`X-Request-ID`)
+- Metrics endpoint (admin-only)
+- Health endpoints (`/ops/live`, `/ops/ready`)
 
-### Failure Handling
-- Orders are created even if stock reservation fails
-- Failed reservations are marked explicitly (FAILED_RESERVATION)
-- Retry endpoint allows recovery after temporary stock issues
+---
 
-This mirrors real production systems, where auditability and traceability
-are more important than deleting failed business attempts.
+## 🧱 Tech Stack
 
-## Authentication Flow
-1. User registers with email and password
-2. Passwords are securely hashed using bcrypt (passlib)
-3. User logs in and receives a JWT access token
-4. Protected endpoints validate the token on each request
-5. User identity is extracted from the token (`/auth/me`)
-
-## Features
-- User registration & login
-- Secure password hashing (bcrypt)
-- JWT authentication
-- Protected endpoints
-- PostgreSQL database with persistent Docker volumes
-- Clean project structure (routers, services, models)
-
-## Tech Stack
-- Python (FastAPI)
-- PostgreSQL
+- FastAPI
 - SQLAlchemy
-- JWT (python-jose)
-- Docker & Docker Compose
+- PostgreSQL
+- Alembic (migrations)
+- Docker / Docker Compose
+- Pytest
 
-## Observability & Audit
+---
 
-- Middleware-ul cu X-Request-ID (request correlation)
-- Global exception handler with consistent error contract
-- OrderEvent audit trail for status transitions
-- Strict state machine enforcement (409 on invalid transitions)
+## 📊 Architecture Overview
+Request
+↓
+FastAPI Router
+↓
+Pydantic Validation
+↓
+Dependencies (Auth, RBAC, DB)
+↓
+Business Logic (Services)
+↓
+Database (PostgreSQL)
+↓
+Response (JSON)
 
-## RBAC (Roles & Access)
+---
 
-This service uses static roles stored in `users.role`:
+## 🔐 Roles & Permissions
 
-- **admin**: full access + operational metrics
-- **operator**: warehouse order workflow (reserve/pick/ship/cancel)
-- **service**: service-to-service access only (used by the future .NET Identity/Orders service)
+| Role      | Permissions                          |
+|----------|--------------------------------------|
+| admin    | Full access + user management        |
+| operator | Order workflow (reserve, pick, ship) |
+| service  | Integration endpoints only           |
 
-### Access Matrix
+---
 
-|   Endpoint group   | admin | operator | service |
-|---|:---:|:---:|:---:|
-| `/orders/*`        | ✅ | ✅ | ❌ |
-| `/metrics`         | ✅ | ❌ | ❌ |
-| `/integrations/*`  | ❌ | ❌ | ✅ |
-| `/ops/*`           | ✅ | ✅ | ✅ |
+## 🧪 Running the Project
+
+### Start services
+
+```bash
+docker compose up --build
+
+Run migrations
+
+docker compose exec api alembic upgrade head
+
+Run tests
+
+docker compose exec api pytest -q
+
+📦 Example Workflow
+Create order
+Reserve stock
+Start picking
+Ship order
+
+🔄 Example Endpoints
+POST /auth/register
+POST /auth/login
+POST /orders
+POST /orders/{id}/reserve
+POST /orders/{id}/retry-reserve
+POST /orders/{id}/start-picking
+POST /orders/{id}/ship
+User Management (admin only)
+DELETE /users/{id} → soft delete
+PATCH /users/{id}/role → update role
+
+🛡️ Data Integrity Rules
+
+At least one active admin must always exist
+Enforced at:
+API level (business logic)
+Database level (PostgreSQL trigger)
+
+📌 Notes
+
+Soft-deleted users cannot:
+login
+access protected endpoints
+Tokens are invalidated if user becomes inactive
+
+🧠 What This Project Demonstrates
+
+Clean API design with FastAPI
+Real-world RBAC implementation
+Transaction-safe business logic
+Defensive programming (API + DB constraints)
+Production-like structure and practices
+
+📬 Future Improvements
+
+CI/CD pipeline (GitHub Actions)
+Seed script for demo data
+Frontend dashboard (React)
+Permission-based RBAC (roles → permissions)
 
 ## Running locally
 
@@ -113,7 +158,3 @@ docker compose exec api alembic upgrade head
 # http://localhost:8000/metrics
 
 docker compose ps -a
-
-## Status
-Authentication features are complete. The project is structured to support
-future extensions such as Orders management and role-based authorization.
