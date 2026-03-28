@@ -5,12 +5,12 @@ Revises: 2842f4a4a92e
 Create Date: 2026-02-07 00:16:33.709553
 
 """
-# alembic/versions/xxxx_add_refresh_tokens.py
+# alembic/versions/641ba17374fe_add_refresh_tokens.py
 from alembic import op
 import sqlalchemy as sa
 
-revision = "xxxx"
-down_revision = "641ba17374fe" 
+revision = '0142ddd31192'
+down_revision = '641ba17374fe'
 branch_labels = None
 depends_on = None
 
