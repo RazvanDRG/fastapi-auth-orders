@@ -7,10 +7,10 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.models.product import Product
 from app.core.roles import Roles
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
-PRODUCT_ID = int(os.getenv("TEST_PRODUCT_ID", "1"))
 CUSTOMER_ID = int(os.getenv("TEST_CUSTOMER_ID", "1"))
 
 OP_EMAIL = os.getenv("TEST_OPERATOR_EMAIL", "op_test@example.com")
@@ -59,6 +59,32 @@ def ensure_user_with_role(email: str, password: str, role: str):
     set_user_role(email, role)
 
 
+def ensure_test_product(required_qty: int = 100) -> int:
+    db = SessionLocal()
+    try:
+        product = db.scalar(select(Product).where(Product.sku == "SKU-test"))
+
+        if product is None:
+            product = Product(
+                sku="SKU-test",
+                name="Test Product",
+                stock_qty=required_qty,
+            )
+            db.add(product)
+            db.commit()
+            db.refresh(product)
+            return product.id
+
+        if product.stock_qty < required_qty:
+            product.stock_qty = required_qty
+            db.commit()
+            db.refresh(product)
+
+        return product.id
+    finally:
+        db.close()
+
+
 def login_access_token(email: str, password: str) -> str:
     r = httpx.post(
         f"{BASE_URL}/auth/login",
@@ -96,17 +122,17 @@ def test_happy_path_order_flow_operator():
     wait_api()
     ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
     token = login_access_token(OP_EMAIL, OP_PASS)
+    product_id = ensure_test_product()
 
     reference = f"NL-ORDER-TEST-{uuid.uuid4().hex[:8]}"
 
-    # Create order
     r = httpx.post(
         f"{BASE_URL}/orders",
         headers=auth_headers(token),
         json={
             "customer_id": CUSTOMER_ID,
             "reference": reference,
-            "items": [{"product_id": PRODUCT_ID, "qty": 1}],
+            "items": [{"product_id": product_id, "qty": 1}],
         },
         timeout=10,
     )
@@ -114,22 +140,18 @@ def test_happy_path_order_flow_operator():
     order = r.json()
     order_id = order["id"]
 
-    # reserve -> RESERVED
     r = httpx.post(f"{BASE_URL}/orders/{order_id}/reserve", headers=auth_headers(token), timeout=10)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "RESERVED"
 
-    # start-pick -> PICKING
     r = httpx.post(f"{BASE_URL}/orders/{order_id}/start-pick", headers=auth_headers(token), timeout=10)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "PICKING"
 
-    # confirm-pick -> PICKED
     r = httpx.post(f"{BASE_URL}/orders/{order_id}/confirm-pick", headers=auth_headers(token), timeout=10)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "PICKED"
 
-    # ship -> SHIPPED
     r = httpx.post(f"{BASE_URL}/orders/{order_id}/ship", headers=auth_headers(token), timeout=10)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "SHIPPED"
@@ -139,6 +161,7 @@ def test_strict_transition_start_pick_from_new_is_409():
     wait_api()
     ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
     token = login_access_token(OP_EMAIL, OP_PASS)
+    product_id = ensure_test_product()
 
     reference = f"NL-ORDER-TEST-{uuid.uuid4().hex[:8]}"
 
@@ -148,14 +171,13 @@ def test_strict_transition_start_pick_from_new_is_409():
         json={
             "customer_id": CUSTOMER_ID,
             "reference": reference,
-            "items": [{"product_id": PRODUCT_ID, "qty": 1}],
+            "items": [{"product_id": product_id, "qty": 1}],
         },
         timeout=10,
     )
     assert r.status_code == 200, r.text
     order_id = r.json()["id"]
 
-    # start-pick directly from NEW must fail
     r = httpx.post(f"{BASE_URL}/orders/{order_id}/start-pick", headers=auth_headers(token), timeout=10)
     assert r.status_code == 409, r.text
 
@@ -165,12 +187,9 @@ def test_service_cannot_access_orders_but_can_use_integrations():
     ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
     svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
 
-    # service must NOT access /orders/*
     r = httpx.get(f"{BASE_URL}/orders/1", headers=auth_headers(svc_token), timeout=10)
     assert r.status_code == 403, r.text
 
-    # service CAN access /integrations/*
-    # Depending on data/order state, business result may vary
     r = httpx.post(f"{BASE_URL}/integrations/orders/1/reserve", headers=auth_headers(svc_token), timeout=10)
     assert r.status_code in (200, 404, 409), r.text
 
@@ -192,7 +211,6 @@ def test_soft_deleted_user_cannot_login():
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
 
-    # find user id
     db = SessionLocal()
     try:
         user = db.scalar(select(User).where(User.email == email))
@@ -201,7 +219,6 @@ def test_soft_deleted_user_cannot_login():
     finally:
         db.close()
 
-    # create admin and soft-delete the user
     admin_email = f"admin_{uuid.uuid4().hex[:6]}@example.com"
     admin_pass = "pass1234"
 
@@ -215,7 +232,6 @@ def test_soft_deleted_user_cannot_login():
     )
     assert r.status_code == 200, r.text
 
-    # deleted user should no longer be able to login
     r = httpx.post(
         f"{BASE_URL}/auth/login",
         json={"email": email, "password": password},
@@ -239,7 +255,6 @@ def test_cannot_delete_last_active_admin():
         assert user is not None
         user_id = user.id
 
-        # Make this user the only active admin
         admins = db.scalars(
             select(User).where(
                 User.role == Roles.ADMIN,
