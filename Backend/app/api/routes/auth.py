@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.db.session import get_db
 from app.models.user import User
@@ -8,7 +8,6 @@ from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, Refre
 from app.services.auth import hash_password, verify_password, create_access_token
 from app.core.security import get_current_user
 from app.services.refresh_tokens import issue_refresh_token, rotate_refresh_token, revoke_refresh_token
-from app.services.auth import create_access_token
 from app.core.roles import Roles
 
 
@@ -22,10 +21,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
     password = payload.password.strip()
 
+    first_name = payload.first_name.strip() if payload.first_name else None
+    last_name = payload.last_name.strip() if payload.last_name else None
+
     user = User(
         email=payload.email,
         hashed_password=hash_password(password),
         role=Roles.OPERATOR,
+        first_name=first_name,
+        last_name=last_name,
     )
 
     db.add(user)
@@ -37,6 +41,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"message": "registered"}
+
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
@@ -80,6 +85,13 @@ def logout(payload: LogoutRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "logged out"}
 
+
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
-    return {"id": current_user.id, "email": current_user.email, "role": current_user.role}
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "role": current_user.role,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+    }

@@ -3,8 +3,6 @@ from sqlalchemy import Column, Integer, String, Enum
 from app.db.base import Base
 
 
-note = Column(String(255), nullable=True)
-
 class OrderStatus(str, enum.Enum):
     NEW = "NEW"
     RESERVED = "RESERVED"
