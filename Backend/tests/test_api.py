@@ -32,10 +32,21 @@ def wait_api():
     raise RuntimeError("API not ready (ops/live not responding)")
 
 
-def register(email: str, password: str):
+def register(email: str, password: str, first_name: str | None = None, last_name: str | None = None):
+    payload = {
+        "email": email,
+        "password": password,
+    }
+
+    if first_name is not None:
+        payload["first_name"] = first_name
+
+    if last_name is not None:
+        payload["last_name"] = last_name
+
     r = httpx.post(
         f"{BASE_URL}/auth/register",
-        json={"email": email, "password": password},
+        json=payload,
         timeout=10,
     )
     if r.status_code in (200, 201, 409):
@@ -276,3 +287,31 @@ def test_cannot_delete_last_active_admin():
         timeout=10,
     )
     assert r.status_code == 409, r.text
+    
+    
+def test_register_with_optional_first_and_last_name():
+    wait_api()
+
+    email = f"name_{uuid.uuid4().hex[:6]}@example.com"
+    password = "pass1234"
+
+    r = httpx.post(
+        f"{BASE_URL}/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "first_name": "John",
+            "last_name": "Doe",
+        },
+        timeout=10,
+    )
+    assert r.status_code == 201, r.text
+
+    db = SessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == email))
+        assert user is not None
+        assert user.first_name == "John"
+        assert user.last_name == "Doe"
+    finally:
+        db.close()

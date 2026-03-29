@@ -3,10 +3,10 @@
 Backend service for warehouse order processing, built with FastAPI, SQLAlchemy, and PostgreSQL.
 
 This project simulates a real-world warehouse workflow:
-Order → Reserve → Pick → Ship
+Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ✅ Key Capabilities
-- End-to-end order workflow (Create → Reserve → Pick → Ship)
+- End-to-end order workflow
 - Role-Based Access Control (RBAC)
 - Transaction-safe stock handling
 - Full integration test coverage
@@ -16,13 +16,14 @@ Order → Reserve → Pick → Ship
 ## 🚀 Features
 
 ### Core Functionality
-- Order lifecycle management (create, reserve, pick, ship)
+- Order lifecycle management (create order, reserve, start pick, confirm pick, ship)
 - Stock reservation with transactional safety
 - Idempotent operations (retry-safe endpoints)
 - Audit trail for all state transitions
 
 ### Authentication & Security
 - JWT authentication (access + refresh tokens)
+- User registration with email/password and optional profile fields
 - Role-Based Access Control (RBAC)
   - `admin`
   - `operator`
@@ -74,60 +75,75 @@ Response (JSON)
 
 ## 🔐 Roles & Permissions
 
-| Role      | Permissions                          |
+| Role     | Permissions                          |
 |----------|--------------------------------------|
 | admin    | Full access + user management        |
-| operator | Order workflow (reserve, pick, ship) |
+| operator | Order workflow                       |
 | service  | Integration endpoints only           |
 
 ---
 
 ## 🧪 Running the Project
 
----
-
 ### Start services
 
 ```bash
 docker compose up --build
-docker compose down
 ```
 
----
+### Stop services
+
+```bash
+docker compose down
+```
 
 ### Run migrations
 
 ```bash
+docker compose exec api alembic current
+```
+```bash
 docker compose exec api alembic upgrade head
+```
+
+### Check containers
+
+```bash
+docker compose ps -a
 ```
 
 ---
 
-## 📦 Example Workflow
+## Example Endpoints
 
-1. Create order  
-2. Reserve stock  
-3. Start picking  
-4. Ship order  
-
----
-
-## 🔄 Example Endpoints
+### Ops
+- GET /ops/live
+- GET /ops/ready
 
 ### Auth
 - POST /auth/register
 - POST /auth/login
+- POST /auth/refresh
+- POST /auth/logout
+- GET /auth/me
 
 ### Orders
 - POST /orders
-- POST /orders/{id}/reserve
-- POST /orders/{id}/retry-reserve
-- POST /orders/{id}/start-picking
-- POST /orders/{id}/ship
+- GET /orders/{order_id}
+- POST /orders/{order_id}/reserve
+- POST /orders/{order_id}/retry-reserve
+- POST /orders/{order_id}/start-pick
+- POST /orders/{order_id}/confirm-pick
+- POST /orders/{order_id}/ship
+- POST /orders/{order_id}/cancel
+
+### Integrations
+- POST /integrations/orders/{order_id}/reserve
+- POST /integrations/orders/{order_id}/release
 
 ### User Management (admin only)
-- DELETE /users/{id}
-- PATCH /users/{id}/role
+- DELETE /users/{user_id}
+- PATCH /users/{user_id}/role
 
 ---
 
@@ -142,6 +158,7 @@ docker compose exec api alembic upgrade head
 
 ## 📌 Notes
 
+- Registration supports optional profile fields: `first_name`, `last_name`
 - Soft-deleted users cannot:
 	- login
 	- access protected endpoints
@@ -220,23 +237,6 @@ The test suite includes 8 integration tests covering API behavior, RBAC, and dat
 ---
 
 ## 🔧 Useful Links
+
 - API docs: http://localhost:8000/docs
-
----
-
-## Alembic
-```bash
-docker compose exec api alembic current
-docker compose exec api alembic upgrade head
-```
-
----
-
-## Metrics
-- http://localhost:8000/metrics
-
-```bash
-docker compose ps -a
-```
-
----
+- Metrics: http://localhost:8000/metrics (admin only)
