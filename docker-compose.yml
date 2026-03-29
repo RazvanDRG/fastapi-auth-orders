@@ -16,15 +16,15 @@ services:
       retries: 20
 
   api:
-    build: .
-    env_file: .env
+    build: ./Backend
+    env_file: ./Backend/.env
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
-      - .:/app  
+      - ./Backend:/app
     healthcheck:
       test: ["CMD-SHELL", "curl -fs http://localhost:8000/ops/ready || exit 1"]
       interval: 10s

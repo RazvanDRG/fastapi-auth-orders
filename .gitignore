@@ -1,21 +1,40 @@
 # Python
 __pycache__/
-*.pyc
-alembic/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 
-# Env
-.env
-.env.*
-!.env.example
+# Virtual environments
 .venv/
+venv/
+env/
 
-# Docker / DB
+# Test / tooling cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment files
+Backend/.env
+Backend/.env.*
+!Backend/.env.example
+
+# Docker / local DB data
 pgdata/
 postgres-data/
 docker-data/
 
-# VS Code
-.vscode/
-
 # OS
+.DS_Store
 Thumbs.db
+
+# Local database artifacts
+*.sqlite3
+
+# Logs
+*.log
