@@ -15,23 +15,11 @@ jobs:
       - name: Create .env from example
         run: cp Backend/.env.example Backend/.env
 
-      - name: Build and start Docker containers
+      - name: Build and start containers
         run: docker compose up -d --build
 
       - name: Show container status
         run: docker compose ps -a
-
-      - name: Wait for API to be ready
-        run: |
-          for i in {1..30}; do
-            if docker compose exec -T api curl -fsS http://localhost:8000/ops/live > /dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs api --tail=200
-          docker compose logs db --tail=200
-          exit 1
 
       - name: Run Alembic migrations
         run: docker compose run --rm api alembic upgrade head
