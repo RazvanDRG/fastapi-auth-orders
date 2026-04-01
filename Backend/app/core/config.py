@@ -12,19 +12,19 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     refresh_token_salt: str
 
+    smtp_host: str
+    smtp_port: int = 587
+    smtp_use_tls: bool = True
+    smtp_username: str
+    smtp_password: str
+    smtp_from_email: str
+    smtp_from_name: str = "Warehouse Operations Service"
+
     # Reset password settings
     password_reset_code_ttl_minutes: int = 10
     password_reset_max_attempts: int = 5
     password_reset_code_salt: str
     
-    
-    smtp_host: str
-    smtp_port: int = 587
-    smtp_username: str
-    smtp_password: str
-    smtp_from_email: str
-    smtp_from_name: str = "Warehouse Operations Service"
-    smtp_use_tls: bool = True
 
 model_config = SettingsConfigDict(env_file=".env")
 
