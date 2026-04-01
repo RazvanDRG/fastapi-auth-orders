@@ -18,9 +18,30 @@ jobs:
       - name: Build and start Docker containers
         run: docker compose up -d --build
 
+      - name: Show container status
+        run: docker compose ps -a
+
+      - name: Wait for API to be ready
+        run: |
+          for i in {1..30}; do
+            if docker compose exec -T api curl -fsS http://localhost:8000/ops/live > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs api --tail=200
+          docker compose logs db --tail=200
+          exit 1
+
       - name: Run Alembic migrations
-        run: docker compose exec -T api alembic upgrade head
+        run: docker compose run --rm api alembic upgrade head
 
       - name: Run tests
         run: docker compose exec -T api pytest -q
-        
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs api --tail=200
+          docker compose logs db --tail=200
