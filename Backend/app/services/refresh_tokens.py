@@ -56,3 +56,17 @@ def revoke_refresh_token(db: Session, raw_token: str) -> None:
     rt = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     if rt and rt.revoked_at is None:
         rt.revoked_at = datetime.now(timezone.utc)
+
+
+def revoke_all_refresh_tokens_for_user(db: Session, user_id: int) -> None:
+    now = datetime.now(timezone.utc)
+
+    tokens = db.scalars(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    ).all()
+
+    for token in tokens:
+        token.revoked_at = now
