@@ -46,6 +46,14 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ---
 
+## Design Decisions
+
+- role-based RBAC chosen for simplicity and clarity
+- service layer separates business logic from routes
+- DB trigger protects last active admin as final safeguard
+
+---
+
 ## 🧱 Tech Stack
 
 - FastAPI
