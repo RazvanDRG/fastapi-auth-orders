@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.roles import Roles
 from app.models.user import User
+from app.models.user_admin_event import UserAdminEvent
 
 
-def soft_delete_user(db: Session, user_id: int) -> dict:
+def soft_delete_user(db: Session, user_id: int, actor: User | None = None) -> dict:
     user = db.get(User, user_id)
 
     if not user:
@@ -30,6 +31,16 @@ def soft_delete_user(db: Session, user_id: int) -> dict:
                 detail="Cannot delete the last active admin",
             )
 
+    db.add(
+        UserAdminEvent(
+            user_id=user.id,
+            actor_user_id=getattr(actor, "id", None),
+            action="USER_SOFT_DELETED",
+            old_role=user.role,
+            new_role=None,
+        )
+    )
+
     user.is_deleted = True
     user.deleted_at = datetime.utcnow()
 
@@ -38,7 +49,7 @@ def soft_delete_user(db: Session, user_id: int) -> dict:
     return {"message": "User soft deleted"}
 
 
-def update_user_role(db: Session, user_id: int, new_role: str) -> dict:
+def update_user_role(db: Session, user_id: int, new_role: str, actor: User | None = None) -> dict:
     user = db.get(User, user_id)
 
     if not user:
@@ -70,7 +81,19 @@ def update_user_role(db: Session, user_id: int, new_role: str) -> dict:
                 detail="Cannot demote the last active admin",
             )
 
+    old_role = user.role
     user.role = new_role
+
+    db.add(
+        UserAdminEvent(
+            user_id=user.id,
+            actor_user_id=getattr(actor, "id", None),
+            action="ROLE_CHANGED",
+            old_role=old_role,
+            new_role=new_role,
+        )
+    )
+
     db.commit()
     db.refresh(user)
 
