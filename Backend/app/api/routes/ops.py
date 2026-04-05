@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from sqlalchemy import text
+
 from app.core.config import settings
 from app.db.session import engine
-from sqlalchemy import text
 
 ops_router = APIRouter(prefix="/ops", tags=["Ops"])
 
@@ -10,11 +11,12 @@ ops_router = APIRouter(prefix="/ops", tags=["Ops"])
 def live():
     return {"status": "ok", "app": settings.app_name}
 
+
 @ops_router.get("/ready", summary="Readiness probe (DB)")
 def ready():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ok", "db": "up"}
-    except Exception as e:
-        return {"status": "error", "db": "down", "detail": str(e)}
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database not ready")

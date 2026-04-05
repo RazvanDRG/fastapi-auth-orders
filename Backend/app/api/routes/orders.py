@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, Request
+from fastapi import APIRouter, Depends, Body, Request
 from sqlalchemy.orm import Session
 
 from app.core.rbac import require_roles
@@ -11,9 +11,12 @@ from app.schemas.orders import OrderCreate, OrderOut
 from app.core.roles import Roles
 from app.services.orders_service import (
     get_order,
-    reserve_stock_for_order,
-    restock_for_order,
-    transition,
+    reserve_order_flow,
+    retry_reserve_order_flow,
+    start_pick_flow,
+    confirm_pick_flow,
+    ship_order_flow,
+    cancel_order_flow,
 )
 
 router = APIRouter(
@@ -74,40 +77,12 @@ def reserve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # Idempotency (only for the target state)
-    if order.status == OrderStatus.RESERVED:
-        return order
-
-    # Policy: retry explicitly via /retry-reserve
-    if order.status == OrderStatus.FAILED_RESERVATION:
-        raise HTTPException(status_code=409, detail="Order previously failed reservation")
-
-    rid = _request_id(request)
-
-    try:
-        reserve_stock_for_order(db, order_id)
-        transition(db, order, OrderStatus.RESERVED, actor=current_user, request_id=rid)
-        db.commit()
-        db.refresh(order)
-        return order
-
-    except HTTPException as e:
-        db.rollback()
-
-        # For insufficient stock (409), mark FAILED_RESERVATION + audit it
-        if e.status_code == 409:
-            order = get_order(db, order_id)
-            transition(db, order, OrderStatus.FAILED_RESERVATION, actor=current_user, request_id=rid)
-            db.commit()
-            db.refresh(order)
-
-        raise
-
-    except Exception:
-        db.rollback()
-        raise
+    return reserve_order_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )
 
 
 @router.post("/{order_id}/start-pick", response_model=OrderOut, summary="Start picking")
@@ -117,23 +92,12 @@ def start_pick(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # idempotent only if already in target state
-    if order.status == OrderStatus.PICKING:
-        return order
-
-    # strict: can only start picking from RESERVED
-    if order.status != OrderStatus.RESERVED:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot start picking from {order.status}. Expected {OrderStatus.RESERVED}.",
-        )
-
-    transition(db, order, OrderStatus.PICKING, actor=current_user, request_id=_request_id(request))
-    db.commit()
-    db.refresh(order)
-    return order
+    return start_pick_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )
 
 
 @router.post("/{order_id}/confirm-pick", response_model=OrderOut, summary="Confirm picked")
@@ -143,23 +107,12 @@ def confirm_pick(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # idempotent only if already in target state
-    if order.status == OrderStatus.PICKED:
-        return order
-
-    # strict: can only confirm pick from PICKING
-    if order.status != OrderStatus.PICKING:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot confirm pick from {order.status}. Expected {OrderStatus.PICKING}.",
-        )
-
-    transition(db, order, OrderStatus.PICKED, actor=current_user, request_id=_request_id(request))
-    db.commit()
-    db.refresh(order)
-    return order
+    return confirm_pick_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )
 
 
 @router.post("/{order_id}/ship", response_model=OrderOut, summary="Ship order")
@@ -169,23 +122,12 @@ def ship(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # idempotent only if already in target state
-    if order.status == OrderStatus.SHIPPED:
-        return order
-
-    # strict: can only ship from PICKED
-    if order.status != OrderStatus.PICKED:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot ship from {order.status}. Expected {OrderStatus.PICKED}.",
-        )
-
-    transition(db, order, OrderStatus.SHIPPED, actor=current_user, request_id=_request_id(request))
-    db.commit()
-    db.refresh(order)
-    return order
+    return ship_order_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut, summary="Cancel order")
@@ -195,31 +137,12 @@ def cancel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # idempotent only if already in target state
-    if order.status == OrderStatus.CANCELLED:
-        return order
-
-    # strict rule: cannot cancel shipped
-    if order.status == OrderStatus.SHIPPED:
-        raise HTTPException(status_code=409, detail="Cannot cancel a shipped order")
-
-    rid = _request_id(request)
-
-    try:
-        # Restock only if stock was decremented earlier
-        if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
-            restock_for_order(db, order_id)
-
-        transition(db, order, OrderStatus.CANCELLED, actor=current_user, request_id=rid)
-        db.commit()
-        db.refresh(order)
-        return order
-
-    except Exception:
-        db.rollback()
-        raise
+    return cancel_order_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )
 
 
 @router.post("/{order_id}/retry-reserve", response_model=OrderOut, summary="Retry reserve stock")
@@ -229,40 +152,9 @@ def retry_reserve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = get_order(db, order_id)
-
-    # Idempotency (only for target state)
-    if order.status == OrderStatus.RESERVED:
-        return order
-
-    # strict: retry only from FAILED_RESERVATION
-    if order.status != OrderStatus.FAILED_RESERVATION:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Retry reserve allowed only for FAILED_RESERVATION. Current: {order.status}",
-        )
-
-    rid = _request_id(request)
-
-    try:
-        reserve_stock_for_order(db, order_id)
-        transition(db, order, OrderStatus.RESERVED, actor=current_user, request_id=rid)
-        db.commit()
-        db.refresh(order)
-        return order
-
-    except HTTPException as e:
-        db.rollback()
-
-        # If still no stock, keep FAILED_RESERVATION but audit the re-failure
-        if e.status_code == 409:
-            order = get_order(db, order_id)
-            transition(db, order, OrderStatus.FAILED_RESERVATION, actor=current_user, request_id=rid)
-            db.commit()
-            db.refresh(order)
-
-        raise
-
-    except Exception:
-        db.rollback()
-        raise
+    return retry_reserve_order_flow(
+        db=db,
+        order_id=order_id,
+        actor=current_user,
+        request_id=_request_id(request),
+    )

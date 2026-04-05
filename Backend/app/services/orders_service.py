@@ -118,3 +118,188 @@ def transition(
             request_id=request_id,
         )
     )
+    
+    
+def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.RESERVED:
+        return order
+
+    if order.status == OrderStatus.FAILED_RESERVATION:
+        raise HTTPException(status_code=409, detail="Order previously failed reservation")
+
+    try:
+        reserve_stock_for_order(db, order_id)
+        transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
+        db.commit()
+        db.refresh(order)
+        return order
+
+    except HTTPException as e:
+        db.rollback()
+
+        if e.status_code == 409:
+            order = get_order(db, order_id)
+            transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
+            db.commit()
+            db.refresh(order)
+
+        raise
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.RESERVED:
+        return order
+
+    if order.status != OrderStatus.FAILED_RESERVATION:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Retry reserve allowed only for FAILED_RESERVATION. Current: {order.status}",
+        )
+
+    try:
+        reserve_stock_for_order(db, order_id)
+        transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
+        db.commit()
+        db.refresh(order)
+        return order
+
+    except HTTPException as e:
+        db.rollback()
+
+        if e.status_code == 409:
+            order = get_order(db, order_id)
+            transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
+            db.commit()
+            db.refresh(order)
+
+        raise
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def start_pick_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.PICKING:
+        return order
+
+    if order.status != OrderStatus.RESERVED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot start picking from {order.status}. Expected {OrderStatus.RESERVED}.",
+        )
+
+    transition(db, order, OrderStatus.PICKING, actor=actor, request_id=request_id)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def confirm_pick_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.PICKED:
+        return order
+
+    if order.status != OrderStatus.PICKING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot confirm pick from {order.status}. Expected {OrderStatus.PICKING}.",
+        )
+
+    transition(db, order, OrderStatus.PICKED, actor=actor, request_id=request_id)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def ship_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.SHIPPED:
+        return order
+
+    if order.status != OrderStatus.PICKED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot ship from {order.status}. Expected {OrderStatus.PICKED}.",
+        )
+
+    transition(db, order, OrderStatus.SHIPPED, actor=actor, request_id=request_id)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.CANCELLED:
+        return order
+
+    if order.status == OrderStatus.SHIPPED:
+        raise HTTPException(status_code=409, detail="Cannot cancel a shipped order")
+
+    try:
+        if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
+            restock_for_order(db, order_id)
+
+        transition(db, order, OrderStatus.CANCELLED, actor=actor, request_id=request_id)
+        db.commit()
+        db.refresh(order)
+        return order
+
+    except Exception:
+        db.rollback()
+        raise
+    
+def integration_reserve_flow(db: Session, order_id: int):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.RESERVED:
+        return {"status": "RESERVED"}
+
+    try:
+        reserve_stock_for_order(db, order_id)
+        transition(db, order, OrderStatus.RESERVED, actor=None, request_id=None)
+        db.commit()
+        return {"status": "RESERVED"}
+    except Exception:
+        db.rollback()
+        raise
+
+
+def integration_release_flow(db: Session, order_id: int):
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.CANCELLED:
+        return {"status": "CANCELLED"}
+
+    if order.status not in (
+        OrderStatus.RESERVED,
+        OrderStatus.PICKING,
+        OrderStatus.PICKED,
+        OrderStatus.FAILED_RESERVATION,
+    ):
+        raise HTTPException(status_code=409, detail=f"Cannot release from {order.status}")
+
+    try:
+        if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
+            restock_for_order(db, order_id)
+
+        transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=None)
+        db.commit()
+        return {"status": "CANCELLED"}
+    except Exception:
+        db.rollback()
+        raise

@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.rbac import require_roles
-from app.db.session import get_db
-from app.services.orders_service import get_order, reserve_stock_for_order, restock_for_order, transition
-from app.models.order import OrderStatus
 from app.core.roles import Roles
+from app.db.session import get_db
+from app.services.orders_service import integration_reserve_flow, integration_release_flow
 
 router = APIRouter(
     prefix="/integrations",
@@ -13,30 +12,12 @@ router = APIRouter(
     dependencies=[Depends(require_roles(Roles.SERVICE))],
 )
 
+
 @router.post("/orders/{order_id}/reserve")
 def integration_reserve(order_id: int, db: Session = Depends(get_db)):
-    order = get_order(db, order_id)
-    if order.status == OrderStatus.RESERVED:
-        return {"status": "RESERVED"}  # idempotent
+    return integration_reserve_flow(db, order_id)
 
-    reserve_stock_for_order(db, order_id)
-    transition(db, order, OrderStatus.RESERVED, actor=None, request_id=None)
-    db.commit()
-    return {"status": "RESERVED"}
 
 @router.post("/orders/{order_id}/release")
 def integration_release(order_id: int, db: Session = Depends(get_db)):
-    order = get_order(db, order_id)
-    if order.status == OrderStatus.CANCELLED:
-        return {"status": "CANCELLED"}  # idempotent
-
-    # Only release if previously reserved-ish
-    if order.status not in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED, OrderStatus.FAILED_RESERVATION):
-        raise HTTPException(status_code=409, detail=f"Cannot release from {order.status}")
-
-    if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
-        restock_for_order(db, order_id)
-
-    transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=None)
-    db.commit()
-    return {"status": "CANCELLED"}
+    return integration_release_flow(db, order_id)
