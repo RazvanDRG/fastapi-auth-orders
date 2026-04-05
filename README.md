@@ -304,6 +304,14 @@ The test suite includes integration tests covering API behavior, RBAC, data inte
 - Reset fails if the new password matches the current password
 (test_reset_password_fails_if_new_password_matches_current_password)
 
+17. User role audit event
+- Role updates create an admin audit record with actor, old role, and new role
+(test_update_user_role_creates_admin_audit_event)
+
+18. User soft delete audit event
+- Soft delete creates an admin audit record with actor and previous role
+(test_soft_delete_user_creates_admin_audit_event)
+
 ---
 
 ## 🔧 Useful Links
