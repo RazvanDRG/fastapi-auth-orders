@@ -123,6 +123,7 @@ def reset_password_with_code(
             status_code=400,
             detail="New password must be different from the current password"
         )
+        
 
     user.hashed_password = hash_password(new_password)
     reset_record.used_at = now

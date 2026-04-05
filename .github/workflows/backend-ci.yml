@@ -2,18 +2,28 @@ name: CI
 
 on:
   push:
+    paths:
+      - 'Backend/**'
+      - '.github/workflows/backend-ci.yml'
   pull_request:
+    paths:
+      - 'Backend/**'
+      - '.github/workflows/backend-ci.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Backend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Create .env from example
-        run: cp Backend/.env.example Backend/.env
+        run: cp .env.example .env
 
       - name: Build and start containers
         run: docker compose up -d --build
