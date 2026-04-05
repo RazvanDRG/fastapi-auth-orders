@@ -48,8 +48,8 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ## Design Decisions
 
-- role-based RBAC chosen for simplicity and clarity
-- service layer separates business logic from routes
+- Role-based RBAC chosen for simplicity and clarity
+- Service layer separates business logic from routes
 - DB trigger protects last active admin as final safeguard
 
 ---
@@ -124,6 +124,18 @@ docker compose ps -a
 
 ---
 
+## ⚙️ CI
+
+A GitHub Actions workflow runs the backend validation pipeline automatically on push and pull request.
+
+Current CI steps:
+- build Docker services
+- run Alembic migrations
+- run the test suite
+- show container logs on failure
+
+---
+
 ## Example Endpoints
 
 ### Ops
@@ -193,7 +205,6 @@ docker compose ps -a
 
 ## 📬 Future Improvements
 
-- CI/CD pipeline (GitHub Actions)
 - Seed script for demo data
 - Frontend dashboard (React)
 - Permission-based RBAC (roles → permissions)
