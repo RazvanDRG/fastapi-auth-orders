@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from app.models.password_reset_code import PasswordResetCode
 from app.models.refresh_token import RefreshToken
 from app.services.auth import hash_reset_code
+from app.models.user_admin_event import UserAdminEvent
 
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -570,3 +571,102 @@ def test_reset_password_fails_if_new_password_matches_current_password():
     )
     assert r.status_code == 400, r.text
     assert r.json()["detail"] == "New password must be different from the current password"
+    
+
+def test_update_user_role_creates_admin_audit_event():
+    wait_api()
+
+    target_email = f"userrole_{uuid.uuid4().hex[:6]}@example.com"
+    target_password = "pass1234"
+    ensure_user_with_role(target_email, target_password, Roles.OPERATOR)
+
+    admin_email = f"adminrole_{uuid.uuid4().hex[:6]}@example.com"
+    admin_password = "pass1234"
+    ensure_user_with_role(admin_email, admin_password, Roles.ADMIN)
+    admin_token = login_access_token(admin_email, admin_password)
+
+    db = SessionLocal()
+    try:
+        target_user = db.scalar(select(User).where(User.email == target_email))
+        admin_user = db.scalar(select(User).where(User.email == admin_email))
+        assert target_user is not None
+        assert admin_user is not None
+        target_user_id = target_user.id
+        admin_user_id = admin_user.id
+    finally:
+        db.close()
+
+    r = httpx.patch(
+        f"{BASE_URL}/users/{target_user_id}/role",
+        headers=auth_headers(admin_token),
+        json={"role": Roles.SERVICE},
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == Roles.SERVICE
+
+    db = SessionLocal()
+    try:
+        event = db.scalar(
+            select(UserAdminEvent)
+            .where(
+                UserAdminEvent.user_id == target_user_id,
+                UserAdminEvent.action == "ROLE_CHANGED",
+            )
+            .order_by(UserAdminEvent.created_at.desc())
+        )
+        assert event is not None
+        assert event.actor_user_id == admin_user_id
+        assert event.old_role == Roles.OPERATOR
+        assert event.new_role == Roles.SERVICE
+    finally:
+        db.close()
+
+
+def test_soft_delete_user_creates_admin_audit_event():
+    wait_api()
+
+    target_email = f"userdel_{uuid.uuid4().hex[:6]}@example.com"
+    target_password = "pass1234"
+    ensure_user_with_role(target_email, target_password, Roles.OPERATOR)
+
+    admin_email = f"admindel_{uuid.uuid4().hex[:6]}@example.com"
+    admin_password = "pass1234"
+    ensure_user_with_role(admin_email, admin_password, Roles.ADMIN)
+    admin_token = login_access_token(admin_email, admin_password)
+
+    db = SessionLocal()
+    try:
+        target_user = db.scalar(select(User).where(User.email == target_email))
+        admin_user = db.scalar(select(User).where(User.email == admin_email))
+        assert target_user is not None
+        assert admin_user is not None
+        target_user_id = target_user.id
+        admin_user_id = admin_user.id
+    finally:
+        db.close()
+
+    r = httpx.delete(
+        f"{BASE_URL}/users/{target_user_id}",
+        headers=auth_headers(admin_token),
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["message"] == "User soft deleted"
+
+    db = SessionLocal()
+    try:
+        event = db.scalar(
+            select(UserAdminEvent)
+            .where(
+                UserAdminEvent.user_id == target_user_id,
+                UserAdminEvent.action == "USER_SOFT_DELETED",
+            )
+            .order_by(UserAdminEvent.created_at.desc())
+        )
+        assert event is not None
+        assert event.actor_user_id == admin_user_id
+        assert event.old_role == Roles.OPERATOR
+        assert event.new_role is None
+    finally:
+        db.close()

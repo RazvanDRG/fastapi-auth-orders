@@ -6,6 +6,7 @@ This project simulates a real-world warehouse workflow:
 Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ✅ Key Capabilities
+
 - End-to-end order workflow
 - Role-Based Access Control (RBAC)
 - Transaction-safe stock handling
@@ -16,12 +17,14 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 ## 🚀 Features
 
 ### Core Functionality
+
 - Order lifecycle management (create order, reserve, start pick, confirm pick, ship)
 - Stock reservation with transactional safety
 - Idempotent operations (retry-safe endpoints)
 - Audit trail for all state transitions
 
 ### Authentication & Security
+
 - JWT authentication (access + refresh tokens)
 - User registration with email/password and optional profile fields
 - Password recovery via 6-digit email reset code with expiration and attempt limits
@@ -34,12 +37,15 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 - Global exception handling
 
 ### Data Integrity (Enterprise-grade)
+
 - Soft delete for users (`is_deleted`, `deleted_at`)
 - Protection against deleting the last active admin (API level)
 - Protection against deleting the last active admin (DB trigger)
 - Role validation and access enforcement
+- Admin audit trail for user role changes and soft deletions
 
 ### Observability
+
 - Structured logging with request correlation (`X-Request-ID`)
 - Metrics endpoint (admin-only)
 - Health endpoints (`/ops/live`, `/ops/ready`)
@@ -48,9 +54,10 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ## Design Decisions
 
-- Role-based RBAC chosen for simplicity and clarity
-- Service layer separates business logic from routes
-- DB trigger protects last active admin as final safeguard
+- Role-based RBAC was chosen for simplicity and clarity.
+- A service layer separates business logic from routes.
+- A DB trigger protects the last active admin as a final safeguard.
+- A dedicated admin audit table preserves a history of role changes and soft deletions on users.
 
 ---
 
@@ -112,6 +119,11 @@ docker compose down
 ```bash
 docker compose exec api alembic current
 ```
+
+```bash
+docker compose exec api alembic revision -m "..."
+```
+
 ```bash
 docker compose exec api alembic upgrade head
 ```
