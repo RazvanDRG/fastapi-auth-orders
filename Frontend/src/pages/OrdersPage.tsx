@@ -134,13 +134,13 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Orders workflow</h1>
-        <p className="mt-1 text-sm text-slate-300">
+        <h1 className="text-4xl font-bold tracking-tight text-white">Orders workflow</h1>
+        <p className="mt-2 text-sm text-slate-300">
           Create an order, load it by ID, then drive the warehouse lifecycle.
         </p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
           <div className="mb-5">
             <h2 className="text-2xl font-semibold text-white">Create order</h2>
@@ -180,7 +180,7 @@ export default function OrdersPage() {
                 value={orderIdInput}
                 onChange={(e) => setOrderIdInput(e.target.value)}
                 placeholder="e.g. 16"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
               />
             </div>
 
