@@ -112,11 +112,16 @@ export function ForgotPasswordPage() {
                   </label>
                   <input
                     type="email"
+                    autoFocus
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value.trim())}
                     placeholder="name@example.com"
                     className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                   />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    We’ll send a reset code if the account exists.
+                  </p>
                 </div>
 
                 {error && (
