@@ -1,33 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
+import { getErrorMessage } from "../lib/error";
 
 const PASSWORD_REGEX =
   /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]{8,64}$/;
 
 const CODE_REGEX = /^\d{6}$/;
-
-function getErrorMessage(err: any): string {
-  const detail = err?.response?.data?.detail;
-
-  if (typeof detail === "string") return detail;
-
-  if (Array.isArray(detail)) {
-    return detail
-      .map((item) => {
-        if (typeof item === "string") return item;
-        if (item?.msg) return item.msg;
-        return JSON.stringify(item);
-      })
-      .join(", ");
-  }
-
-  if (detail && typeof detail === "object") {
-    return detail.msg || JSON.stringify(detail);
-  }
-
-  return "Failed to reset password. Please verify the code and try again.";
-}
 
 function getPasswordChecks(password: string) {
   return {
@@ -86,18 +66,10 @@ export function ResetPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [formError, setFormError] = useState("");
 
-  const passwordChecks = useMemo(
-    () => getPasswordChecks(newPassword),
-    [newPassword]
-  );
-
-  const passwordStrength = useMemo(
-    () => getPasswordStrength(newPassword),
-    [newPassword]
-  );
+  const passwordChecks = useMemo(() => getPasswordChecks(newPassword), [newPassword]);
+  const passwordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
   const passwordsMatch =
     confirmPassword.length > 0 && newPassword === confirmPassword;
@@ -115,28 +87,27 @@ export function ResetPasswordPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setFormError("");
 
     if (!email.trim()) {
-      setError("Email is required.");
+      setFormError("Email is required.");
       return;
     }
 
     if (!CODE_REGEX.test(code)) {
-      setError("Reset code must be 6 digits.");
+      setFormError("Reset code must be 6 digits.");
       return;
     }
 
     if (!PASSWORD_REGEX.test(newPassword)) {
-      setError(
+      setFormError(
         "Password must be 8–64 characters, include at least one uppercase letter and one special character."
       );
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
+      setFormError("Passwords do not match.");
       return;
     }
 
@@ -150,10 +121,12 @@ export function ResetPasswordPage() {
         confirm_password: confirmPassword,
       });
 
-      setSuccess(response?.message || "Password reset successfully.");
-      setTimeout(() => navigate("/login"), 1200);
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+      toast.success(response?.message || "Password reset successfully.");
+      setTimeout(() => navigate("/login"), 1000);
+    } catch (err: unknown) {
+      toast.error(
+        getErrorMessage(err, "Failed to reset password. Please verify the code and try again.")
+      );
     } finally {
       setLoading(false);
     }
@@ -188,8 +161,7 @@ export function ResetPasswordPage() {
               <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
                 <p className="text-sm font-semibold text-white">Password policy</p>
                 <p className="mt-2 text-sm text-slate-400">
-                  8 to 64 characters, one uppercase letter, and one special
-                  character.
+                  8 to 64 characters, one uppercase letter, and one special character.
                 </p>
               </div>
             </div>
@@ -220,7 +192,7 @@ export function ResetPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value.trim())}
                     placeholder="name@example.com"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                 </div>
 
@@ -237,7 +209,7 @@ export function ResetPasswordPage() {
                       setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
                     }
                     placeholder="Enter the 6-digit code"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                   <p className="mt-2 text-xs text-slate-500">
                     Enter the 6-digit code sent to your email.
@@ -253,7 +225,7 @@ export function ResetPasswordPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Min 8 chars, 1 uppercase, 1 special char"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
 
                   <div className="mt-3">
@@ -298,7 +270,7 @@ export function ResetPasswordPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Repeat the new password"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
 
                   {confirmPassword && (
@@ -312,15 +284,9 @@ export function ResetPasswordPage() {
                   )}
                 </div>
 
-                {error && (
+                {formError && (
                   <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                    {error}
-                  </div>
-                )}
-
-                {success && (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                    {success}
+                    {formError}
                   </div>
                 )}
 
@@ -329,7 +295,14 @@ export function ResetPasswordPage() {
                   disabled={isDisabled}
                   className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Resetting password..." : "Reset password"}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                      Resetting password...
+                    </span>
+                  ) : (
+                    "Reset password"
+                  )}
                 </button>
               </form>
 
@@ -338,10 +311,7 @@ export function ResetPasswordPage() {
                   Back to sign in
                 </Link>
 
-                <Link
-                  to="/forgot-password"
-                  className="transition hover:text-cyan-300"
-                >
+                <Link to="/forgot-password" className="transition hover:text-cyan-300">
                   Request a new code
                 </Link>
               </div>

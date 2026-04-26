@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
+import { getErrorMessage } from "../lib/error";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -9,20 +11,37 @@ export function LoginPage() {
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("password123");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
+    setFormError("");
+
+    if (!email.trim()) {
+      setFormError("Email is required.");
+      return;
+    }
+
+    if (!password.trim()) {
+      setFormError("Password is required.");
+      return;
+    }
 
     try {
       setLoading(true);
-      await login({ email, password });
-      navigate("/dashboard");
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.detail ||
-          "Login failed. Please check your credentials."
+
+      await login({
+        email: email.trim(),
+        password,
+      });
+
+      navigate("/dashboard", {
+        state: { loginSuccess: true },
+        replace: true,
+      });
+    } catch (err: unknown) {
+      toast.error(
+        getErrorMessage(err, "Login failed. Please check your credentials.")
       );
     } finally {
       setLoading(false);
@@ -85,10 +104,11 @@ export function LoginPage() {
                   </label>
                   <input
                     type="email"
+                    autoFocus
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@example.com"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                 </div>
 
@@ -100,38 +120,39 @@ export function LoginPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    placeholder="Enter your password"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                 </div>
 
-                {error && (
+                {formError && (
                   <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                    {error}
+                    {formError}
                   </div>
                 )}
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Signing in..." : "Sign in"}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                      Signing in...
+                    </span>
+                  ) : (
+                    "Sign in"
+                  )}
                 </button>
               </form>
 
               <div className="mt-6 flex flex-col gap-3 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-                <Link
-                  to="/register"
-                  className="transition hover:text-cyan-300"
-                >
+                <Link to="/register" className="transition hover:text-cyan-300">
                   Create account
                 </Link>
 
-                <Link
-                  to="/forgot-password"
-                  className="transition hover:text-cyan-300"
-                >
+                <Link to="/forgot-password" className="transition hover:text-cyan-300">
                   Forgot password?
                 </Link>
               </div>

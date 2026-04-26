@@ -1,5 +1,7 @@
 import { useState } from "react";
+import toast from "react-hot-toast";
 import { api } from "../../lib/api";
+import { getErrorMessage } from "../../lib/error";
 
 type Item = {
   product_id: number;
@@ -15,54 +17,73 @@ export default function CreateOrderForm({
   const [reference, setReference] = useState("");
   const [items, setItems] = useState<Item[]>([{ product_id: 1, qty: 1 }]);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   function updateItem(index: number, field: keyof Item, value: number) {
     const updated = [...items];
     updated[index][field] = value;
     setItems(updated);
+    setFormError("");
   }
 
   function addItem() {
     setItems([...items, { product_id: 1, qty: 1 }]);
+    setFormError("");
   }
 
   function removeItem(index: number) {
+    if (items.length === 1) {
+      setFormError("An order must contain at least one item.");
+      return;
+    }
+
     setItems(items.filter((_, i) => i !== index));
+    setFormError("");
   }
 
   async function handleSubmit() {
+    setFormError("");
+
+    if (customerId <= 0) {
+      setFormError("Customer ID must be greater than 0.");
+      return;
+    }
+
     if (!reference.trim()) {
-      alert("Reference is required.");
+      setFormError("Reference is required.");
       return;
     }
 
     if (items.length === 0) {
-      alert("Add at least one item.");
+      setFormError("Add at least one item.");
       return;
     }
 
-    const invalidItem = items.some((item) => item.product_id <= 0 || item.qty <= 0);
+    const invalidItem = items.some(
+      (item) => item.product_id <= 0 || item.qty <= 0
+    );
 
     if (invalidItem) {
-      alert("Product ID and quantity must be greater than 0.");
+      setFormError("Product ID and quantity must be greater than 0.");
       return;
     }
 
     try {
       setLoading(true);
 
-      const res = await api.post("/orders", {
+      const response = await api.post("/orders", {
         customer_id: customerId,
-        reference,
+        reference: reference.trim(),
         items,
       });
 
-      onCreated(res.data.id);
+      toast.success(`Order ${response.data.id} created successfully.`);
+      onCreated(response.data.id);
+
       setReference("");
       setItems([{ product_id: 1, qty: 1 }]);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to create order.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to create order."));
     } finally {
       setLoading(false);
     }
@@ -84,9 +105,13 @@ export default function CreateOrderForm({
           </label>
           <input
             type="number"
+            min={1}
             value={customerId}
-            onChange={(e) => setCustomerId(Number(e.target.value))}
-            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+            onChange={(e) => {
+              setCustomerId(Number(e.target.value));
+              setFormError("");
+            }}
+            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
           />
         </div>
 
@@ -98,18 +123,23 @@ export default function CreateOrderForm({
             type="text"
             placeholder="e.g. NL-ORDER-001"
             value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+            onChange={(e) => {
+              setReference(e.target.value);
+              setFormError("");
+            }}
+            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
           />
         </div>
 
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-lg font-semibold text-white">Items</h4>
+
             <button
               type="button"
               onClick={addItem}
-              className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300"
+              disabled={loading}
+              className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Add item
             </button>
@@ -127,11 +157,12 @@ export default function CreateOrderForm({
                   </label>
                   <input
                     type="number"
+                    min={1}
                     value={item.product_id}
                     onChange={(e) =>
                       updateItem(index, "product_id", Number(e.target.value))
                     }
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                 </div>
 
@@ -141,9 +172,12 @@ export default function CreateOrderForm({
                   </label>
                   <input
                     type="number"
+                    min={1}
                     value={item.qty}
-                    onChange={(e) => updateItem(index, "qty", Number(e.target.value))}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+                    onChange={(e) =>
+                      updateItem(index, "qty", Number(e.target.value))
+                    }
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                 </div>
 
@@ -151,7 +185,8 @@ export default function CreateOrderForm({
                   <button
                     type="button"
                     onClick={() => removeItem(index)}
-                    className="w-full rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 md:w-auto"
+                    disabled={loading}
+                    className="w-full rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
                   >
                     Remove
                   </button>
@@ -161,13 +196,26 @@ export default function CreateOrderForm({
           </div>
         </div>
 
+        {formError && (
+          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+            {formError}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={handleSubmit}
           disabled={loading}
           className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Creating..." : "Create order"}
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+              Creating...
+            </span>
+          ) : (
+            "Create order"
+          )}
         </button>
       </div>
     </div>
