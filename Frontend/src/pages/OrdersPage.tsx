@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import CreateOrderForm from "../components/orders/CreateOrderForm";
 import { api } from "../lib/api";
+import { getErrorMessage } from "../lib/error";
 
 type OrderStatus =
   | "created"
@@ -23,11 +25,6 @@ type Order = {
   status: OrderStatus;
   items?: OrderItem[];
 };
-
-type Feedback = {
-  type: "success" | "error" | "info";
-  message: string;
-} | null;
 
 const statusToneMap: Record<string, string> = {
   created: "bg-slate-700/70 text-slate-100 border border-slate-600",
@@ -57,37 +54,41 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [formError, setFormError] = useState("");
 
   const currentStepIndex = useMemo(() => {
     if (!selectedOrder?.status) return -1;
     return workflowSteps.indexOf(selectedOrder.status.toLowerCase());
   }, [selectedOrder?.status]);
 
-  async function fetchOrderById(id?: number) {
+  async function fetchOrderById(id?: number, options?: { silent?: boolean }) {
     const parsedId = id ?? Number(orderIdInput);
 
+    setFormError("");
+
     if (!parsedId || Number.isNaN(parsedId) || parsedId <= 0) {
-      setFeedback({ type: "error", message: "Enter a valid order ID." });
+      setFormError("Enter a valid order ID.");
       return;
     }
 
     try {
       setLoadingOrder(true);
-      setFeedback(null);
 
       const response = await api.get(`/orders/${parsedId}`);
       setSelectedOrder(response.data);
       setOrderIdInput(String(parsedId));
-      setFeedback({ type: "success", message: `Order ${parsedId} loaded.` });
-    } catch (error: any) {
+
+      if (!options?.silent) {
+        toast.success(`Order ${parsedId} loaded.`);
+      }
+    } catch (err: unknown) {
       setSelectedOrder(null);
-      setFeedback({
-        type: "error",
-        message:
-          error?.response?.data?.detail ||
-          "Failed to load order. Check the ID and try again.",
-      });
+      toast.error(
+        getErrorMessage(
+          err,
+          "Failed to load order. Check the ID and try again."
+        )
+      );
     } finally {
       setLoadingOrder(false);
     }
@@ -95,28 +96,25 @@ export default function OrdersPage() {
 
   async function runOrderAction(action: string) {
     if (!selectedOrder?.id) {
-      setFeedback({ type: "error", message: "Load an order first." });
+      setFormError("Load an order first.");
       return;
     }
 
     try {
       setActionLoading(action);
-      setFeedback(null);
+      setFormError("");
 
       await api.post(`/orders/${selectedOrder.id}/${action}`);
-      await fetchOrderById(selectedOrder.id);
+      await fetchOrderById(selectedOrder.id, { silent: true });
 
-      setFeedback({
-        type: "success",
-        message: `Action "${action}" completed for order ${selectedOrder.id}.`,
-      });
-    } catch (error: any) {
-      setFeedback({
-        type: "error",
-        message:
-          error?.response?.data?.detail ||
-          `Failed to run "${action}" for order ${selectedOrder.id}.`,
-      });
+      toast.success(`Action "${action}" completed for order ${selectedOrder.id}.`);
+    } catch (err: unknown) {
+      toast.error(
+        getErrorMessage(
+          err,
+          `Failed to run "${action}" for order ${selectedOrder.id}.`
+        )
+      );
     } finally {
       setActionLoading(null);
     }
@@ -134,7 +132,9 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold tracking-tight text-white">Orders workflow</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-white">
+          Orders workflow
+        </h1>
         <p className="mt-2 text-sm text-slate-300">
           Create an order, load it by ID, then drive the warehouse lifecycle.
         </p>
@@ -152,18 +152,16 @@ export default function OrdersPage() {
           <CreateOrderForm
             onCreated={(id) => {
               setOrderIdInput(String(id));
-              setFeedback({
-                type: "success",
-                message: `Order ${id} created successfully.`,
-              });
-              fetchOrderById(id);
+              fetchOrderById(id, { silent: true });
             }}
           />
         </section>
 
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
           <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">Load and operate</h2>
+            <h2 className="text-2xl font-semibold text-white">
+              Load and operate
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
               Because the backend has no list endpoint, lookup is by order ID.
             </p>
@@ -178,9 +176,12 @@ export default function OrdersPage() {
                 type="number"
                 min={1}
                 value={orderIdInput}
-                onChange={(e) => setOrderIdInput(e.target.value)}
+                onChange={(e) => {
+                  setOrderIdInput(e.target.value);
+                  setFormError("");
+                }}
                 placeholder="e.g. 16"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
               />
             </div>
 
@@ -190,10 +191,23 @@ export default function OrdersPage() {
                 disabled={loadingOrder}
                 className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
               >
-                {loadingOrder ? "Fetching..." : "Fetch order"}
+                {loadingOrder ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                    Fetching...
+                  </span>
+                ) : (
+                  "Fetch order"
+                )}
               </button>
             </div>
           </div>
+
+          {formError && (
+            <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+              {formError}
+            </div>
+          )}
 
           <div className="mt-6">
             {!selectedOrder ? (
@@ -258,7 +272,8 @@ export default function OrdersPage() {
                     {workflowSteps.map((step, index) => {
                       const active = currentStepIndex >= index;
                       const current =
-                        selectedOrder.status?.toLowerCase() === step.toLowerCase();
+                        selectedOrder.status?.toLowerCase() ===
+                        step.toLowerCase();
 
                       return (
                         <div
@@ -279,13 +294,16 @@ export default function OrdersPage() {
 
                   {selectedOrder.status?.toLowerCase() === "cancelled" && (
                     <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                      This order is cancelled. Further workflow actions may fail by design.
+                      This order is cancelled. Further workflow actions may fail by
+                      design.
                     </div>
                   )}
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-                  <h4 className="mb-4 text-lg font-semibold text-white">Actions</h4>
+                  <h4 className="mb-4 text-lg font-semibold text-white">
+                    Actions
+                  </h4>
 
                   <div className="flex flex-wrap gap-3">
                     {actions.map((action) => {
@@ -302,7 +320,14 @@ export default function OrdersPage() {
                               : "border border-slate-700 bg-slate-800 text-slate-100 hover:border-cyan-400 hover:text-cyan-300"
                           }`}
                         >
-                          {isLoading ? "Working..." : action.label}
+                          {isLoading ? (
+                            <span className="flex items-center gap-2">
+                              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              Working...
+                            </span>
+                          ) : (
+                            action.label
+                          )}
                         </button>
                       );
                     })}
@@ -310,7 +335,9 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-                  <h4 className="mb-4 text-lg font-semibold text-white">Items</h4>
+                  <h4 className="mb-4 text-lg font-semibold text-white">
+                    Items
+                  </h4>
 
                   {selectedOrder.items && selectedOrder.items.length > 0 ? (
                     <div className="overflow-hidden rounded-2xl border border-slate-800">
@@ -328,8 +355,12 @@ export default function OrdersPage() {
                         <tbody className="divide-y divide-slate-800 bg-slate-950/40">
                           {selectedOrder.items.map((item, index) => (
                             <tr key={`${item.product_id}-${index}`}>
-                              <td className="px-4 py-3 text-slate-200">{item.product_id}</td>
-                              <td className="px-4 py-3 text-slate-200">{item.qty}</td>
+                              <td className="px-4 py-3 text-slate-200">
+                                {item.product_id}
+                              </td>
+                              <td className="px-4 py-3 text-slate-200">
+                                {item.qty}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -346,20 +377,6 @@ export default function OrdersPage() {
           </div>
         </section>
       </div>
-
-      {feedback && (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            feedback.type === "success"
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-              : feedback.type === "error"
-              ? "border-rose-500/20 bg-rose-500/10 text-rose-300"
-              : "border-sky-500/20 bg-sky-500/10 text-sky-300"
-          }`}
-        >
-          {feedback.message}
-        </div>
-      )}
     </div>
   );
 }

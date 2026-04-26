@@ -1,4 +1,14 @@
-import { Activity, ShieldCheck, Server, Database, Boxes, ChevronRight } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import {
+  Activity,
+  ShieldCheck,
+  Server,
+  Database,
+  Boxes,
+  ChevronRight,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 type HealthStatus = "ok" | "up" | "unknown";
@@ -12,7 +22,9 @@ function StatusBadge({ value }: { value: HealthStatus | string }) {
       : "border-slate-700 bg-slate-800 text-slate-300";
 
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${styles}`}>
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${styles}`}
+    >
       {value}
     </span>
   );
@@ -41,7 +53,9 @@ function MetricCard({
   return (
     <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-black/10">
       <div className="mb-4 flex items-center gap-3">
-        <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">{icon}</div>
+        <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
+          {icon}
+        </div>
         <p className="text-sm font-medium text-slate-400">{title}</p>
       </div>
       <h3 className="text-2xl font-bold text-white">{value}</h3>
@@ -52,11 +66,32 @@ function MetricCard({
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // 🔥 prevenire dublu toast
+  const loginToastShown = useRef(false);
+
+  useEffect(() => {
+    if (location.state?.loginSuccess && !loginToastShown.current) {
+      loginToastShown.current = true;
+
+      toast.success("Signed in successfully.");
+
+      // 🔥 curăță state-ul ca să nu mai ruleze iar
+      navigate(location.pathname, {
+        replace: true,
+        state: {},
+      });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold tracking-tight text-white">System dashboard</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-white">
+          System dashboard
+        </h1>
         <p className="mt-2 text-sm text-slate-300">
           High-signal overview for a technical demo or interview walkthrough.
         </p>
@@ -86,7 +121,9 @@ export function DashboardPage() {
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
           <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">Endpoint coverage</h2>
+            <h2 className="text-2xl font-semibold text-white">
+              Endpoint coverage
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
               Every backend route is surfaced in the UI.
             </p>
@@ -103,15 +140,23 @@ export function DashboardPage() {
             <FeatureItem>Forgot/reset password flow</FeatureItem>
             <FeatureItem>Order state machine controls</FeatureItem>
             <FeatureItem>RBAC-aware navigation</FeatureItem>
-            <FeatureItem>Admin user role mutation and soft delete</FeatureItem>
-            <FeatureItem>Service-only integration trigger panel</FeatureItem>
-            <FeatureItem>Protected metrics reader for admins</FeatureItem>
+            <FeatureItem>
+              Admin user role mutation and soft delete
+            </FeatureItem>
+            <FeatureItem>
+              Service-only integration trigger panel
+            </FeatureItem>
+            <FeatureItem>
+              Protected metrics reader for admins
+            </FeatureItem>
           </div>
         </section>
 
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
           <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">Operational status</h2>
+            <h2 className="text-2xl font-semibold text-white">
+              Operational status
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
               Snapshot of the system behavior exposed in the demo environment.
             </p>
@@ -119,48 +164,58 @@ export function DashboardPage() {
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-300">API liveness probe</p>
-                  <p className="mt-1 text-sm text-slate-500">GET /ops/live</p>
+                  <p className="text-sm font-medium text-slate-300">
+                    API liveness probe
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    GET /ops/live
+                  </p>
                 </div>
                 <StatusBadge value="ok" />
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-300">Database readiness probe</p>
-                  <p className="mt-1 text-sm text-slate-500">GET /ops/readiness</p>
+                  <p className="text-sm font-medium text-slate-300">
+                    Database readiness probe
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    GET /ops/readiness
+                  </p>
                 </div>
                 <StatusBadge value="up" />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-800 p-3 text-slate-300">
-                  <Server size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-300">Service target</p>
-                  <p className="mt-1 text-sm text-slate-500">Warehouse Operations Service</p>
-                </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 flex items-center gap-3">
+              <div className="rounded-2xl bg-slate-800 p-3 text-slate-300">
+                <Server size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Service target
+                </p>
+                <p className="text-sm text-slate-500">
+                  Warehouse Operations Service
+                </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-800 p-3 text-slate-300">
-                  <Boxes size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-300">Primary workflow</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Create → reserve → pick → confirm → ship
-                  </p>
-                </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4 flex items-center gap-3">
+              <div className="rounded-2xl bg-slate-800 p-3 text-slate-300">
+                <Boxes size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-300">
+                  Primary workflow
+                </p>
+                <p className="text-sm text-slate-500">
+                  Create → reserve → pick → confirm → ship
+                </p>
               </div>
             </div>
           </div>
@@ -169,8 +224,10 @@ export function DashboardPage() {
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
         <div className="mb-5">
-          <h2 className="text-2xl font-semibold text-white">Reality check</h2>
-          <p className="mt-1 text-sm text-slate-400">
+          <h2 className="text-2xl font-semibold text-white">
+            Reality check
+          </h2>
+          <p className="text-sm text-slate-400">
             What the backend does not expose is handled honestly.
           </p>
         </div>
@@ -178,22 +235,24 @@ export function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
             <p className="text-sm font-semibold text-white">Orders</p>
-            <p className="mt-2 text-sm text-slate-400">
-              There is no order list endpoint, so orders are created or loaded up by ID.
+            <p className="text-sm text-slate-400">
+              No list endpoint → load by ID.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
             <p className="text-sm font-semibold text-white">Users</p>
-            <p className="mt-2 text-sm text-slate-400">
-              There is no users list endpoint, so admin actions are targeted by explicit user ID.
+            <p className="text-sm text-slate-400">
+              No list endpoint → target by ID.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-            <p className="text-sm font-semibold text-white">Integrations</p>
-            <p className="mt-2 text-sm text-slate-400">
-              Integration actions are isolated to the service role, matching the API contract.
+            <p className="text-sm font-semibold text-white">
+              Integrations
+            </p>
+            <p className="text-sm text-slate-400">
+              Service role isolation.
             </p>
           </div>
         </div>

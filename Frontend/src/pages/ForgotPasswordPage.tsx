@@ -1,55 +1,37 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
+import { getErrorMessage } from "../lib/error";
 
-function getErrorMessage(err: any): string {
-  const detail = err?.response?.data?.detail;
-
-  if (typeof detail === "string") {
-    return detail;
-  }
-
-  if (Array.isArray(detail)) {
-    return detail
-      .map((item) => {
-        if (typeof item === "string") return item;
-        if (item?.msg) return item.msg;
-        return JSON.stringify(item);
-      })
-      .join(", ");
-  }
-
-  if (detail && typeof detail === "object") {
-    return detail.msg || JSON.stringify(detail);
-  }
-
-  return "Failed to send reset code. Please try again.";
-}
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ForgotPasswordPage() {
   const { forgotPassword } = useAuth();
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [formError, setFormError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setFormError("");
+
+    if (!EMAIL_REGEX.test(email)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
 
     try {
       setLoading(true);
 
       const response = await forgotPassword({ email });
 
-      setSuccess(
-        response?.message ||
-          "If the account exists, a reset code has been sent to the email address."
+      toast.success(
+        response?.message || "If the account exists, a reset code has been sent."
       );
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to send reset code. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -68,8 +50,7 @@ export function ForgotPasswordPage() {
                 Recover account access
               </h1>
               <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
-                Start the password reset flow by requesting a reset code for the
-                account email.
+                Start the password reset flow by requesting a reset code for the account email.
               </p>
             </div>
 
@@ -84,8 +65,7 @@ export function ForgotPasswordPage() {
               <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
                 <p className="text-sm font-semibold text-white">Security note</p>
                 <p className="mt-2 text-sm text-slate-400">
-                  The flow avoids revealing too much about account existence and
-                  stays aligned with the backend behavior.
+                  The flow avoids revealing too much about account existence.
                 </p>
               </div>
             </div>
@@ -101,7 +81,7 @@ export function ForgotPasswordPage() {
                   Forgot password
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  Enter your email to receive a password reset code.
+                  Enter your account email. If it exists, you’ll receive a reset code.
                 </p>
               </div>
 
@@ -116,32 +96,32 @@ export function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value.trim())}
                     placeholder="name@example.com"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
-
                   <p className="mt-2 text-xs text-slate-500">
                     We’ll send a reset code if the account exists.
                   </p>
                 </div>
 
-                {error && (
+                {formError && (
                   <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                    {error}
-                  </div>
-                )}
-
-                {success && (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                    {success}
+                    {formError}
                   </div>
                 )}
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={loading || !EMAIL_REGEX.test(email)}
+                  className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Sending reset code..." : "Send reset code"}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                      Sending reset code...
+                    </span>
+                  ) : (
+                    "Send reset code"
+                  )}
                 </button>
               </form>
 
@@ -150,10 +130,7 @@ export function ForgotPasswordPage() {
                   Back to sign in
                 </Link>
 
-                <Link
-                  to="/reset-password"
-                  className="transition hover:text-cyan-300"
-                >
+                <Link to="/reset-password" className="transition hover:text-cyan-300">
                   Already have the code?
                 </Link>
               </div>
