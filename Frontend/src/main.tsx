@@ -17,7 +17,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               top: 80, // 👈 coboară toast-ul
             }}
             toastOptions={{
-              duration: 4000,
+              duration: 3000,
               style: {
                 background: "#0f172a",
                 color: "#e2e8f0",
