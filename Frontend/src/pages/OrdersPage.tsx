@@ -141,7 +141,10 @@ export default function OrdersPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+        <section
+          id="create-order"
+          className="scroll-mt-6 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20"
+        >
           <div className="mb-5">
             <h2 className="text-2xl font-semibold text-white">Create order</h2>
             <p className="mt-1 text-sm text-slate-400">
@@ -157,7 +160,10 @@ export default function OrdersPage() {
           />
         </section>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+        <section
+          id="load-order"
+          className="scroll-mt-6 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20"
+        >
           <div className="mb-5">
             <h2 className="text-2xl font-semibold text-white">
               Load and operate
