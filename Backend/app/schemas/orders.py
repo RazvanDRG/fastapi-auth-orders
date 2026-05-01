@@ -24,11 +24,21 @@ class OrderCreate(BaseModel):
             ]
         }
     
+
+class OrderItemOut(BaseModel):
+    product_id: int
+    qty: int
+    product_name: str | None = None
+
+    class Config:
+        from_attributes = True
+        
 class OrderOut(BaseModel):
     id: int
     customer_id: int
     reference: Optional[str]
     status: OrderStatus
+    items: list[OrderItemOut] = []
 
     class Config:
         from_attributes = True
