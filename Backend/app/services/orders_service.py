@@ -74,6 +74,15 @@ def get_order(db: Session, order_id: int) -> Order:
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+
+    for it in items:
+        product = db.query(Product).filter(Product.id == it.product_id).first()
+        it.product_name = product.name if product else None
+
+    order.items = items
+
     return order
 
 

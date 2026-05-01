@@ -18,6 +18,8 @@ from app.services.orders_service import (
     ship_order_flow,
     cancel_order_flow,
 )
+from app.models.product import Product
+from sqlalchemy import select
 
 router = APIRouter(
     prefix="/orders",
@@ -49,7 +51,11 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = Order(customer_id=payload.customer_id, reference=payload.reference, status=OrderStatus.NEW)
+    order = Order(
+    customer_id=current_user.id,
+    reference=payload.reference,
+    status=OrderStatus.NEW,
+    )
     db.add(order)
     db.flush()
 
@@ -61,6 +67,23 @@ def create_order(
     return order
 
 
+@router.get("/products", summary="List products")
+def list_products(
+    db: Session = Depends(get_db),
+):
+    products = db.execute(select(Product)).scalars().all()
+    return products
+
+
+@router.get("/my", response_model=list[OrderOut], summary="My orders")
+def my_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    orders = db.query(Order).filter(Order.customer_id == current_user.id).all()
+    return orders
+
+
 @router.get("/{order_id}", response_model=OrderOut, summary="Get order")
 def read_order(
     order_id: int,
@@ -68,7 +91,6 @@ def read_order(
     current_user: User = Depends(get_current_user),
 ):
     return get_order(db, order_id)
-
 
 @router.post("/{order_id}/reserve", response_model=OrderOut, summary="Reserve stock")
 def reserve(
