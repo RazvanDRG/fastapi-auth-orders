@@ -59,11 +59,25 @@ export type OrderCreatePayload = {
   items: OrderItemCreate[];
 };
 
+export type Product = {
+  id: number;
+  name: string;
+  sku: string;
+  stock_qty: number;
+};
+
+export type OrderItem = {
+  product_id: number;
+  qty: number;
+  product_name?: string;
+};
+
 export type Order = {
   id: number;
   customer_id: number;
-  reference: string | null;
-  status: OrderStatus;
+  reference?: string;
+  status: string;
+  items: OrderItem[];
 };
 
 export type MessageResponse = {
