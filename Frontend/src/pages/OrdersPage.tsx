@@ -5,6 +5,12 @@ import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import type { Order } from "../types/api";
 
+type OrderAction = {
+  key: string;
+  label: string;
+  danger?: boolean;
+};
+
 const statusToneMap: Record<string, string> = {
   NEW: "bg-slate-700/70 text-slate-100 border border-slate-600",
   RESERVED: "bg-amber-500/15 text-amber-300 border border-amber-500/30",
@@ -17,6 +23,30 @@ const statusToneMap: Record<string, string> = {
 };
 
 const workflowSteps = ["NEW", "RESERVED", "PICKING", "PICKED", "SHIPPED"];
+
+const actionsByStatus: Record<string, OrderAction[]> = {
+  NEW: [
+    { key: "reserve", label: "Reserve" },
+    { key: "cancel", label: "Cancel", danger: true },
+  ],
+  FAILED_RESERVATION: [
+    { key: "retry-reserve", label: "Retry reserve" },
+    { key: "cancel", label: "Cancel", danger: true },
+  ],
+  RESERVED: [
+    { key: "start-pick", label: "Start pick" },
+    { key: "cancel", label: "Cancel", danger: true },
+  ],
+  PICKING: [
+    { key: "confirm-pick", label: "Confirm pick" },
+    { key: "cancel", label: "Cancel", danger: true },
+  ],
+  PICKED: [
+    { key: "ship", label: "Ship" },
+  ],
+  SHIPPED: [],
+  CANCELLED: [],
+};
 
 function getStatusClasses(status?: string) {
   return (
@@ -61,6 +91,10 @@ export default function OrdersPage() {
     if (!selectedOrder?.status) return -1;
     return workflowSteps.indexOf(selectedOrder.status.toUpperCase());
   }, [selectedOrder?.status]);
+
+  const availableActions = selectedOrder
+    ? actionsByStatus[selectedOrder.status?.toUpperCase()] ?? []
+    : [];
 
   async function fetchMyOrders(options?: { silent?: boolean }) {
     try {
@@ -139,15 +173,6 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchMyOrders({ silent: true });
   }, []);
-
-  const actions = [
-    { key: "reserve", label: "Reserve" },
-    { key: "retry-reserve", label: "Retry reserve" },
-    { key: "start-pick", label: "Start pick" },
-    { key: "confirm-pick", label: "Confirm pick" },
-    { key: "ship", label: "Ship" },
-    { key: "cancel", label: "Cancel", danger: true },
-  ];
 
   return (
     <div className="space-y-6">
@@ -317,26 +342,32 @@ export default function OrdersPage() {
                     Actions
                   </h4>
 
-                  <div className="flex flex-wrap gap-3">
-                    {actions.map((action) => {
-                      const isLoading = actionLoading === action.key;
+                  {availableActions.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+                      No available actions for this order status.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {availableActions.map((action) => {
+                        const isLoading = actionLoading === action.key;
 
-                      return (
-                        <button
-                          key={action.key}
-                          onClick={() => runOrderAction(action.key)}
-                          disabled={!!actionLoading}
-                          className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            action.danger
-                              ? "border border-rose-400/30 bg-rose-500/90 text-white hover:bg-rose-500"
-                              : "border border-slate-700 bg-slate-800 text-slate-100 hover:border-cyan-400 hover:text-cyan-300"
-                          }`}
-                        >
-                          {isLoading ? "Working..." : action.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        return (
+                          <button
+                            key={action.key}
+                            onClick={() => runOrderAction(action.key)}
+                            disabled={!!actionLoading}
+                            className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                              action.danger
+                                ? "border border-rose-400/30 bg-rose-500/90 text-white hover:bg-rose-500"
+                                : "border border-slate-700 bg-slate-800 text-slate-100 hover:border-cyan-400 hover:text-cyan-300"
+                            }`}
+                          >
+                            {isLoading ? "Working..." : action.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
