@@ -113,6 +113,20 @@ export default function OrdersPage() {
     }
   }
 
+  const orderStats = useMemo(() => {
+    const normalized = myOrders.map((order) => order.status?.toUpperCase());
+
+    return {
+      total: myOrders.length,
+      newOrders: normalized.filter((status) => status === "NEW").length,
+      inProgress: normalized.filter((status) =>
+        ["RESERVED", "PICKING", "PICKED"].includes(status)
+      ).length,
+      shipped: normalized.filter((status) => status === "SHIPPED").length,
+      cancelled: normalized.filter((status) => status === "CANCELLED").length,
+    };
+  }, [myOrders]);
+
   async function fetchOrderById(id?: number, options?: { silent?: boolean }) {
     const parsedId = id ?? Number(orderIdInput);
 
@@ -402,6 +416,41 @@ export default function OrdersPage() {
           </div>
         </section>
       </div>
+      
+      <section className="grid gap-4 md:grid-cols-5">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <p className="text-sm text-slate-400">Total orders</p>
+          <p className="mt-2 text-3xl font-bold text-white">{orderStats.total}</p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <p className="text-sm text-slate-400">New orders</p>
+          <p className="mt-2 text-3xl font-bold text-cyan-300">
+            {orderStats.newOrders}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <p className="text-sm text-slate-400">In progress</p>
+          <p className="mt-2 text-3xl font-bold text-orange-300">
+            {orderStats.inProgress}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <p className="text-sm text-slate-400">Shipped</p>
+          <p className="mt-2 text-3xl font-bold text-emerald-300">
+            {orderStats.shipped}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+          <p className="text-sm text-slate-400">Cancelled</p>
+          <p className="mt-2 text-3xl font-bold text-rose-300">
+            {orderStats.cancelled}
+          </p>
+        </div>
+      </section>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
