@@ -481,8 +481,12 @@ export default function OrdersPage() {
               <button
                 key={order.id}
                 type="button"
-                onClick={() => fetchOrderById(order.id)}
-                className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 text-left transition hover:border-cyan-400/60"
+                onClick={() => fetchOrderById(order.id, { silent: true })}
+                className={`cursor-pointer rounded-3xl border p-5 text-left transition-all duration-200 ${
+                  selectedOrder?.id === order.id
+                    ? "border-cyan-400 bg-cyan-400/5 shadow-lg shadow-cyan-500/10"
+                    : "border-slate-800 bg-slate-900/60 hover:border-cyan-500/40"
+                }`}
               >
                 <div className="mb-3 flex items-start justify-between gap-4">
                   <div>
