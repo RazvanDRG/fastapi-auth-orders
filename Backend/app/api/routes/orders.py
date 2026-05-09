@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Body, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.rbac import require_roles
 from app.core.security import get_current_user
@@ -80,7 +80,22 @@ def my_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    orders = db.query(Order).filter(Order.customer_id == current_user.id).all()
+    orders = (
+        db.query(Order)
+        .filter(Order.customer_id == current_user.id)
+        .order_by(Order.id.desc())
+        .all()
+    )
+
+    for order in orders:
+        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+
+        for item in items:
+            product = db.query(Product).filter(Product.id == item.product_id).first()
+            item.product_name = product.name if product else None
+
+        order.items = items
+
     return orders
 
 
