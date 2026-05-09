@@ -7,22 +7,20 @@ class OrderItemCreate(BaseModel):
     qty: int = Field(..., examples=[2], gt=0)
 
 class OrderCreate(BaseModel):
-    customer_id: int = Field(..., examples=[1])
     reference: Optional[str] = Field(None, examples=["NL-ORDER-001"])
     items: List[OrderItemCreate]
 
     model_config = {
         "examples": [
-                {
-                    "customer_id": 1,
-                    "reference": "NL-ORDER-001",
-                    "items": [
-                        {"product_id": 1, "qty": 2},
-                        {"product_id": 2, "qty": 1}
-                    ]
-                }
-            ]
-        }
+            {
+                "reference": "NL-ORDER-001",
+                "items": [
+                    {"product_id": 1, "qty": 2},
+                    {"product_id": 2, "qty": 1}
+                ]
+            }
+        ]
+    }
     
 
 class OrderItemOut(BaseModel):
