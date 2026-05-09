@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { http } from "../../lib/http";
 import { getErrorMessage } from "../../lib/error";
@@ -23,8 +23,37 @@ export default function CreateOrderForm({
     Record<number, number>
   >({});
   const [reference, setReference] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const minusButtonClass =
+    "flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/70 bg-rose-500/20 text-lg font-bold text-rose-200 shadow-sm shadow-rose-950/30 transition hover:bg-rose-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+
+  const plusButtonClass =
+    "flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-400/70 bg-emerald-500/20 text-lg font-bold text-emerald-200 shadow-sm shadow-emerald-950/30 transition hover:bg-emerald-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+
+  const qtyInputClass =
+    "[appearance:textfield] w-16 bg-transparent text-center text-sm font-bold text-white outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) return products;
+
+    return products.filter((product) => {
+      const isNumericSearch = /^\d+$/.test(query);
+
+      if (isNumericSearch) {
+        return String(product.id) === query;
+      }
+
+      return (
+        product.name.toLowerCase().includes(query) ||
+        product.sku.toLowerCase().includes(query)
+      );
+    });
+  }, [products, searchTerm]);
 
   async function fetchProducts() {
     try {
@@ -63,12 +92,28 @@ export default function CreateOrderForm({
   }
 
   function changeSelectedQty(product: Product, nextQty: number) {
-    const safeQty = clampQty(nextQty, product.stock_qty);
-
     setSelectedQtyByProduct((prev) => ({
       ...prev,
-      [product.id]: safeQty,
+      [product.id]: clampQty(nextQty, product.stock_qty),
     }));
+  }
+
+  function getStockBadge(product: Product) {
+    if (product.stock_qty <= 0) {
+      return "border-rose-500/30 bg-rose-500/10 text-rose-300";
+    }
+
+    if (product.stock_qty <= 10) {
+      return "border-orange-500/30 bg-orange-500/10 text-orange-300";
+    }
+
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  }
+
+  function getStockLabel(product: Product) {
+    if (product.stock_qty <= 0) return "Out of stock";
+    if (product.stock_qty <= 10) return "Low stock";
+    return "In stock";
   }
 
   function addToCart(product: Product) {
@@ -110,14 +155,11 @@ export default function CreateOrderForm({
 
   function changeCartQty(productId: number, nextQty: number) {
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.product_id !== productId) return item;
-
-        return {
-          ...item,
-          qty: clampQty(nextQty, item.stock_qty),
-        };
-      })
+      prev.map((item) =>
+        item.product_id === productId
+          ? { ...item, qty: clampQty(nextQty, item.stock_qty) }
+          : item
+      )
     );
   }
 
@@ -155,35 +197,33 @@ export default function CreateOrderForm({
     }
   }
 
-  const minusButtonClass =
-    "flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/70 bg-rose-500/20 text-lg font-bold text-rose-200 shadow-sm shadow-rose-950/30 transition hover:bg-rose-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
-
-  const plusButtonClass =
-    "flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-400/70 bg-emerald-500/20 text-lg font-bold text-emerald-200 shadow-sm shadow-emerald-950/30 transition hover:bg-emerald-500/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
-
-  const qtyInputClass =
-    "[appearance:textfield] w-16 bg-transparent text-center text-sm font-bold text-white outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
-
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-white">Product catalog</h3>
         <p className="mt-1 text-sm text-slate-400">
-          Select products and quantities before creating the order.
+          Search products, select quantities, and add them to the order.
         </p>
       </div>
+
+      <input
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search by product name, SKU, or ID"
+        className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+      />
 
       {loadingProducts ? (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-6 text-sm text-slate-400">
           Loading products...
         </div>
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-          No products available.
+          No products match your search.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {products.map((product) => {
+          {filteredProducts.map((product) => {
             const selectedQty = getSelectedQty(product);
             const isOutOfStock = product.stock_qty <= 0;
 
@@ -192,16 +232,31 @@ export default function CreateOrderForm({
                 key={product.id}
                 className="rounded-3xl border border-slate-800 bg-slate-950/50 p-4 transition hover:border-cyan-400/60"
               >
-                <div className="mb-4 flex h-32 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70">
-                  <span className="text-sm font-semibold text-cyan-300">
-                    {product.sku}
-                  </span>
+                <div className="mb-4 flex h-32 items-center justify-center rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950">
+                  <div className="text-center">
+                    <p className="text-2xl font-black text-cyan-300">
+                      {product.name.slice(0, 2).toUpperCase()}
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">
+                      {product.sku}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="text-lg font-bold text-white">
-                    {product.name}
-                  </h4>
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="text-lg font-bold text-white">
+                      {product.name}
+                    </h4>
+
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStockBadge(
+                        product
+                      )}`}
+                    >
+                      {getStockLabel(product)}
+                    </span>
+                  </div>
 
                   <p className="text-sm text-slate-400">
                     Product ID:{" "}
