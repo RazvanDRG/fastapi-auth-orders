@@ -519,7 +519,34 @@ export default function OrdersPage() {
                       </p>
                     ))
                   ) : (
-                    <p>No items returned.</p>
+                    <div className="mt-4 space-y-2">
+                      {order.items?.length ? (
+                        order.items.map((item) => (
+                          <div
+                            key={`${order.id}-${item.product_id}`}
+                            className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
+                          >
+                            <div>
+                              <p className="font-medium text-white">
+                                {item.product_name ?? `Product #${item.product_id}`}
+                              </p>
+
+                              <p className="text-sm text-slate-400">
+                                Product ID: {item.product_id}
+                              </p>
+                            </div>
+
+                            <div className="rounded-full bg-cyan-500/10 px-3 py-1 text-sm font-semibold text-cyan-300">
+                              Qty: {item.qty}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          No items returned.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </button>
