@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -13,7 +13,7 @@ export function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError("");
 
@@ -93,6 +93,7 @@ export function ForgotPasswordPage() {
                   <input
                     type="email"
                     autoFocus
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value.trim())}
                     placeholder="name@example.com"
