@@ -8,22 +8,55 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    return localStorage.getItem("last_login_email") || "";
+  });
+
+  const [savedEmails, setSavedEmails] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("login_email_history") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const emailSuggestions = savedEmails.filter((savedEmail) => {
+    const query = email.trim().toLowerCase();
+
+    if (!query) return true;
+
+    return savedEmail.toLowerCase().includes(query);
+  });
+
   function handlePasswordKeyEvent(e: KeyboardEvent<HTMLInputElement>) {
     setCapsLockOn(e.getModifierState("CapsLock"));
+  }
+
+  function saveEmailToHistory(normalizedEmail: string) {
+    const nextEmailHistory = [
+      normalizedEmail,
+      ...savedEmails.filter((savedEmail) => savedEmail !== normalizedEmail),
+    ].slice(0, 5);
+
+    localStorage.setItem("last_login_email", normalizedEmail);
+    localStorage.setItem("login_email_history", JSON.stringify(nextEmailHistory));
+    setSavedEmails(nextEmailHistory);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError("");
 
-    if (!email.trim()) {
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
       setFormError("Email is required.");
       return;
     }
@@ -37,9 +70,11 @@ export function LoginPage() {
       setLoading(true);
 
       await login({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
       });
+
+      saveEmailToHistory(normalizedEmail);
 
       navigate("/dashboard", {
         state: { loginSuccess: true },
@@ -63,9 +98,11 @@ export function LoginPage() {
               <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400 text-xl font-bold text-slate-950">
                 wo
               </div>
+
               <h1 className="text-4xl font-bold tracking-tight text-white">
                 Warehouse Ops
               </h1>
+
               <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
                 Technical demo frontend for authentication, warehouse order flows,
                 role-based access, and operational endpoints.
@@ -97,7 +134,9 @@ export function LoginPage() {
                 <p className="text-sm font-medium uppercase tracking-[0.2em] text-cyan-300">
                   Warehouse Ops Console
                 </p>
+
                 <h2 className="mt-3 text-3xl font-bold text-white">Sign in</h2>
+
                 <p className="mt-2 text-sm text-slate-400">
                   Log in with an existing account and continue the order workflow.
                 </p>
@@ -108,15 +147,43 @@ export function LoginPage() {
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     Email
                   </label>
-                  <input
-                    type="email"
-                    autoFocus
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@gmail.com"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
-                  />
+
+                  <div className="relative">
+                    <input
+                      type="email"
+                      autoFocus
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setShowEmailSuggestions(true);
+                      }}
+                      onFocus={() => setShowEmailSuggestions(true)}
+                      onBlur={() => {
+                        setTimeout(() => setShowEmailSuggestions(false), 150);
+                      }}
+                      placeholder="admin@gmail.com"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+
+                    {showEmailSuggestions && emailSuggestions.length > 0 && (
+                      <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-xl shadow-black/30">
+                        {emailSuggestions.map((savedEmail) => (
+                          <button
+                            key={savedEmail}
+                            type="button"
+                            onMouseDown={() => {
+                              setEmail(savedEmail);
+                              setShowEmailSuggestions(false);
+                            }}
+                            className="block w-full px-4 py-3 text-left text-sm text-slate-200 transition hover:bg-slate-800 hover:text-cyan-300"
+                          >
+                            {savedEmail}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
