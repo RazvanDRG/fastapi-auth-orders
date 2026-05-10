@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -65,6 +65,9 @@ export function ResetPasswordPage() {
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -85,7 +88,11 @@ export function ResetPasswordPage() {
     return valid ? "text-emerald-300" : "text-slate-500";
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handlePasswordKeyEvent(e: KeyboardEvent<HTMLInputElement>) {
+    setCapsLockOn(e.getModifierState("CapsLock"));
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError("");
 
@@ -189,6 +196,7 @@ export function ResetPasswordPage() {
                   <input
                     type="email"
                     autoFocus
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value.trim())}
                     placeholder="name@example.com"
@@ -203,16 +211,17 @@ export function ResetPasswordPage() {
                   <input
                     type="text"
                     inputMode="numeric"
+                    autoComplete="one-time-code"
                     maxLength={6}
                     value={code}
                     onChange={(e) =>
                       setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
                     }
-                    placeholder="Enter the 6-digit code"
+                    placeholder="123456"
                     className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                   />
                   <p className="mt-2 text-xs text-slate-500">
-                    Enter the 6-digit code sent to your email.
+                    Use the six-digit reset code sent by email.
                   </p>
                 </div>
 
@@ -220,13 +229,33 @@ export function ResetPasswordPage() {
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     New password
                   </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Min 8 chars, 1 uppercase, 1 special char"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
-                  />
+
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      onKeyUp={handlePasswordKeyEvent}
+                      onKeyDown={handlePasswordKeyEvent}
+                      placeholder="Min 8 chars, 1 uppercase, 1 special char"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-24 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl px-3 py-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-cyan-300"
+                    >
+                      {showNewPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+
+                  {capsLockOn && (
+                    <p className="mt-2 text-xs text-amber-300">
+                      Caps Lock is on.
+                    </p>
+                  )}
 
                   <div className="mt-3">
                     <div className="mb-2 flex items-center justify-between">
@@ -265,13 +294,27 @@ export function ResetPasswordPage() {
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     Confirm new password
                   </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repeat the new password"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
-                  />
+
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyUp={handlePasswordKeyEvent}
+                      onKeyDown={handlePasswordKeyEvent}
+                      placeholder="Repeat the new password"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-24 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl px-3 py-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-cyan-300"
+                    >
+                      {showConfirmPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
 
                   {confirmPassword && (
                     <p
@@ -279,7 +322,7 @@ export function ResetPasswordPage() {
                         passwordsMatch ? "text-emerald-300" : "text-rose-300"
                       }`}
                     >
-                      {passwordsMatch ? "✓ Passwords match" : "Passwords do not match"}
+                      {passwordsMatch ? "Passwords match." : "Passwords do not match."}
                     </p>
                   )}
                 </div>

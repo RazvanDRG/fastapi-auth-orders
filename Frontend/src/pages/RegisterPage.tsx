@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -61,6 +61,8 @@ export function RegisterPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -71,7 +73,11 @@ export function RegisterPage() {
     return valid ? "text-emerald-300" : "text-slate-500";
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handlePasswordKeyEvent(e: KeyboardEvent<HTMLInputElement>) {
+    setCapsLockOn(e.getModifierState("CapsLock"));
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError("");
 
@@ -162,6 +168,7 @@ export function RegisterPage() {
                   <input
                     type="email"
                     autoFocus
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@example.com"
@@ -173,13 +180,33 @@ export function RegisterPage() {
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     Password
                   </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 8 chars, 1 uppercase, 1 special char"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
-                  />
+
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyUp={handlePasswordKeyEvent}
+                      onKeyDown={handlePasswordKeyEvent}
+                      placeholder="Min 8 chars, 1 uppercase, 1 special char"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-24 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl px-3 py-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-cyan-300"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+
+                  {capsLockOn && (
+                    <p className="mt-2 text-xs text-amber-300">
+                      Caps Lock is on.
+                    </p>
+                  )}
 
                   <div className="mt-3">
                     <div className="mb-2 flex items-center justify-between">
