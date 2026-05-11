@@ -1,396 +1,347 @@
-import { useEffect, useRef } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
-import {
-  Activity,
-  ArrowRight,
-  Boxes,
-  CheckCircle2,
-  ClipboardList,
-  Database,
-  LockKeyhole,
-  PackagePlus,
-  RefreshCcw,
-  Server,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { http } from "../lib/http";
+import { getErrorMessage } from "../lib/error";
+import type { ActivityFeedItem } from "../types/api";
 
-type HealthStatus = "ok" | "up" | "active";
+type DashboardMetrics = {
+  totalOrders: number;
+  newOrders: number;
+  reservedOrders: number;
+  inProgressOrders: number;
+  shippedOrders: number;
+  cancelledOrders: number;
+};
 
-function StatusBadge({ value }: { value: HealthStatus | string }) {
-  const normalized = value.toLowerCase();
+const initialMetrics: DashboardMetrics = {
+  totalOrders: 0,
+  newOrders: 0,
+  reservedOrders: 0,
+  inProgressOrders: 0,
+  shippedOrders: 0,
+  cancelledOrders: 0,
+};
 
-  const styles =
-    normalized === "ok" || normalized === "up" || normalized === "active"
-      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-      : "border-slate-700 bg-slate-800 text-slate-300";
+function formatRelativeTime(dateString: string) {
+  const now = new Date().getTime();
+  const created = new Date(dateString).getTime();
 
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${styles}`}
-    >
-      {value}
-    </span>
-  );
-}
+  const diffSeconds = Math.floor((now - created) / 1000);
 
-function MetricCard({
-  icon,
-  title,
-  value,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  hint: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-black/10">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
-          {icon}
-        </div>
-        <p className="text-sm font-medium text-slate-400">{title}</p>
-      </div>
-      <h3 className="text-2xl font-bold text-white">{value}</h3>
-      <p className="mt-2 text-sm text-slate-400">{hint}</p>
-    </div>
-  );
-}
+  if (diffSeconds < 60) return "Just now";
 
-function CapabilityItem({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <div className="rounded-xl bg-slate-800 p-2 text-cyan-300">{icon}</div>
-        <p className="font-semibold text-white">{title}</p>
-      </div>
-      <p className="text-sm leading-6 text-slate-400">{description}</p>
-    </div>
-  );
-}
+  const minutes = Math.floor(diffSeconds / 60);
 
-function WorkflowStep({ index, label }: { index: number; label: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400/15 text-xs font-bold text-cyan-300">
-        {index}
-      </span>
-      <span className="text-sm font-semibold text-slate-200">{label}</span>
-    </div>
-  );
-}
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
 
-function ActivityItem({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="flex gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-      <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-300" />
-      <div>
-        <p className="text-sm font-semibold text-white">{title}</p>
-        <p className="mt-1 text-sm text-slate-400">{detail}</p>
-      </div>
-    </div>
-  );
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+
+  return `${days}d ago`;
 }
 
 export function DashboardPage() {
-  const { user, refreshProfile } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
-  const loginToastShown = useRef(false);
+
+  const [metrics, setMetrics] = useState<DashboardMetrics>(initialMetrics);
+  const [activityFeed, setActivityFeed] = useState<ActivityFeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (location.state?.loginSuccess && !loginToastShown.current) {
-      loginToastShown.current = true;
-      toast.success("Signed in successfully.");
-
-      navigate(location.pathname, {
-        replace: true,
-        state: {},
-      });
+    if (location.state?.loginSuccess) {
+      toast.success("Welcome back.");
+      window.history.replaceState({}, document.title);
     }
-  }, [location.pathname, location.state, navigate]);
+  }, [location.state]);
 
-  async function handleRefreshProfile() {
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  async function loadDashboard() {
     try {
-      await refreshProfile();
-      toast.success("Session profile refreshed.");
-    } catch {
-      toast.error("Could not refresh the session profile.");
+      setLoading(true);
+
+      const [ordersResponse, activityResponse] = await Promise.all([
+        http.get("/orders/my"),
+        http.get<ActivityFeedItem[]>("/ops/activity"),
+      ]);
+
+      const orders = ordersResponse.data ?? [];
+
+      const nextMetrics: DashboardMetrics = {
+        totalOrders: orders.length,
+        newOrders: 0,
+        reservedOrders: 0,
+        inProgressOrders: 0,
+        shippedOrders: 0,
+        cancelledOrders: 0,
+      };
+
+      for (const order of orders) {
+        switch (order.status) {
+          case "NEW":
+            nextMetrics.newOrders += 1;
+            break;
+
+          case "RESERVED":
+            nextMetrics.reservedOrders += 1;
+            break;
+
+          case "PICKING":
+          case "PICKED":
+            nextMetrics.inProgressOrders += 1;
+            break;
+
+          case "SHIPPED":
+            nextMetrics.shippedOrders += 1;
+            break;
+
+          case "CANCELLED":
+            nextMetrics.cancelledOrders += 1;
+            break;
+
+          default:
+            break;
+        }
+      }
+
+      setMetrics(nextMetrics);
+      setActivityFeed(activityResponse.data ?? []);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to load dashboard."));
+    } finally {
+      setLoading(false);
     }
   }
 
-  const role = user?.role || "operator";
-
-  const roleHint =
-    role === "admin"
-      ? "Can access user management and protected metrics."
-      : role === "service"
-      ? "Can trigger service-only integration workflows."
-      : "Can create, reserve, pick, confirm and ship orders.";
+  const metricCards = useMemo(
+    () => [
+      {
+        label: "Total orders",
+        value: metrics.totalOrders,
+        accent: "from-cyan-500/20 to-cyan-500/5 border-cyan-500/20",
+      },
+      {
+        label: "New orders",
+        value: metrics.newOrders,
+        accent: "from-sky-500/20 to-sky-500/5 border-sky-500/20",
+      },
+      {
+        label: "Reserved",
+        value: metrics.reservedOrders,
+        accent: "from-violet-500/20 to-violet-500/5 border-violet-500/20",
+      },
+      {
+        label: "In progress",
+        value: metrics.inProgressOrders,
+        accent: "from-amber-500/20 to-amber-500/5 border-amber-500/20",
+      },
+      {
+        label: "Shipped",
+        value: metrics.shippedOrders,
+        accent: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/20",
+      },
+      {
+        label: "Cancelled",
+        value: metrics.cancelledOrders,
+        accent: "from-rose-500/20 to-rose-500/5 border-rose-500/20",
+      },
+    ],
+    [metrics]
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white">
-            System dashboard
-          </h1>
-          <p className="mt-2 text-sm text-slate-300">
-            Operational overview for the Warehouse Operations demo.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleRefreshProfile}
-          className="inline-flex w-fit items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300"
-        >
-          <RefreshCcw size={16} />
-          Refresh session
-        </button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard
-          icon={<ShieldCheck size={22} />}
-          title="Current role"
-          value={role}
-          hint={roleHint}
-        />
-        <MetricCard
-          icon={<Activity size={22} />}
-          title="API liveness"
-          value="ok"
-          hint="Warehouse Operations Service is reachable."
-        />
-        <MetricCard
-          icon={<Database size={22} />}
-          title="Database readiness"
-          value="up"
-          hint="Database readiness probe is healthy."
-        />
-      </div>
-
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5">
-          <h2 className="text-2xl font-semibold text-white">Quick actions</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Most common actions for an operator during a warehouse workflow.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <Link
-            to="/orders#create-order"
-            className="group rounded-2xl border border-slate-800 bg-slate-950/40 p-5 transition hover:border-cyan-400/60"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
-                <PackagePlus size={22} />
-              </div>
-              <ArrowRight
-                size={18}
-                className="text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-300"
-              />
-            </div>
-            <p className="font-semibold text-white">Create order</p>
-            <p className="mt-2 text-sm text-slate-400">
-              Open the order workflow and create a new warehouse order.
+    <div className="space-y-8">
+      <section className="rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8 shadow-2xl shadow-black/20">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-300">
+              Warehouse Operations Dashboard
             </p>
-          </Link>
 
-          <Link
-            to="/orders#load-order"
-            className="group rounded-2xl border border-slate-800 bg-slate-950/40 p-5 transition hover:border-cyan-400/60"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
-                <ClipboardList size={22} />
-              </div>
-              <ArrowRight
-                size={18}
-                className="text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-300"
-              />
-            </div>
-            <p className="font-semibold text-white">Load order by ID</p>
-            <p className="mt-2 text-sm text-slate-400">
-              Continue an existing order because the backend exposes lookup by ID.
-            </p>
-          </Link>
+            <h1 className="mt-4 text-4xl font-black tracking-tight text-white">
+              Operational overview
+            </h1>
 
-          <Link
-            to="/profile"
-            className="group rounded-2xl border border-slate-800 bg-slate-950/40 p-5 transition hover:border-cyan-400/60"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
-                <UserRound size={22} />
-              </div>
-              <ArrowRight
-                size={18}
-                className="text-slate-500 transition group-hover:translate-x-1 group-hover:text-cyan-300"
-              />
-            </div>
-            <p className="font-semibold text-white">View profile</p>
-            <p className="mt-2 text-sm text-slate-400">
-              Inspect current session identity, role and secure session state.
+            <p className="mt-4 text-sm leading-7 text-slate-400">
+              Monitor order lifecycle activity, workflow progression, and
+              operational metrics across the warehouse system.
             </p>
-          </Link>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              to="/orders"
+              className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20"
+            >
+              Open Orders Workspace
+            </Link>
+
+            <Link
+              to="/metrics"
+              className="rounded-2xl border border-slate-700 bg-slate-900/70 px-5 py-4 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+            >
+              View System Metrics
+            </Link>
+          </div>
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-          <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">
-              Platform capabilities
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Product-oriented view of what the backend supports.
-            </p>
-          </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {metricCards.map((card) => (
+          <div
+            key={card.label}
+            className={`rounded-3xl border bg-gradient-to-br p-6 ${card.accent}`}
+          >
+            <p className="text-sm font-medium text-slate-400">{card.label}</p>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <CapabilityItem
-              icon={<LockKeyhole size={18} />}
-              title="Authentication"
-              description="JWT login, refresh-token rotation, logout, forgot password and reset password flows."
-            />
-            <CapabilityItem
-              icon={<Boxes size={18} />}
-              title="Orders lifecycle"
-              description="Create orders and move them through reserve, pick, confirm, ship or cancel states."
-            />
-            <CapabilityItem
-              icon={<ShieldCheck size={18} />}
-              title="Role-based access"
-              description="Navigation and available flows mirror backend role expectations."
-            />
-            <CapabilityItem
-              icon={<Server size={18} />}
-              title="Operational endpoints"
-              description="Health probes, integration triggers and protected metrics are represented honestly."
-            />
-          </div>
-        </section>
+            <div className="mt-4 flex items-end justify-between">
+              <span className="text-4xl font-black text-white">
+                {loading ? "--" : card.value}
+              </span>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-          <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">System health</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Current demo environment status.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-300">
-                    API liveness probe
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">GET /ops/live</p>
-                </div>
-                <StatusBadge value="ok" />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-300">
-                    Database readiness probe
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    GET /ops/readiness
-                  </p>
-                </div>
-                <StatusBadge value="up" />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-300">
-                    Authenticated session
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Active role: {role}
-                  </p>
-                </div>
-                <StatusBadge value="active" />
-              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Live
+              </span>
             </div>
           </div>
-        </section>
-      </div>
+        ))}
+      </section>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-          <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">
-              Warehouse workflow
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              The main business flow exposed by the order state machine.
-            </p>
-          </div>
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                Recent activity
+              </h2>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <WorkflowStep index={1} label="Create order" />
-            <WorkflowStep index={2} label="Reserve inventory" />
-            <WorkflowStep index={3} label="Start picking" />
-            <WorkflowStep index={4} label="Confirm pick" />
-            <WorkflowStep index={5} label="Ship order" />
-          </div>
-        </section>
+              <p className="mt-1 text-sm text-slate-400">
+                Real operational events from the backend activity feed.
+              </p>
+            </div>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-          <div className="mb-5">
-            <h2 className="text-2xl font-semibold text-white">
-              Recent activity
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Demo activity summary. The backend does not currently expose an
-              activity feed endpoint.
-            </p>
+            <button
+              onClick={loadDashboard}
+              className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+            >
+              Refresh
+            </button>
           </div>
 
           <div className="space-y-3">
-            <ActivityItem
-              title="Session authenticated"
-              detail="The current user is signed in and role-aware navigation is active."
-            />
-            <ActivityItem
-              title="Dashboard initialized"
-              detail="System health and workflow overview are available for review."
-            />
-            <ActivityItem
-              title="Order workflow ready"
-              detail="Use the Orders page to create or continue an order by ID."
-            />
+            {activityFeed.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
+                No activity available yet.
+              </div>
+            ) : (
+              activityFeed.map((activity, index) => (
+                <div
+                  key={`${activity.title}-${index}`}
+                  className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 transition hover:border-cyan-500/30"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-4">
+                      <div
+                        className={`mt-1 h-3 w-3 rounded-full ${
+                          activity.type === "order"
+                            ? "bg-cyan-400 shadow-lg shadow-cyan-500/40"
+                            : "bg-violet-400 shadow-lg shadow-violet-500/40"
+                        }`}
+                      />
+
+                      <div>
+                        <p className="font-semibold text-white">
+                          {activity.title}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-400">
+                          {activity.description}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {activity.actor_user_id && (
+                            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
+                              User #{activity.actor_user_id}
+                            </span>
+                          )}
+
+                          {activity.actor_role && (
+                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-300">
+                              {activity.actor_role}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="whitespace-nowrap text-xs text-slate-500">
+                      {formatRelativeTime(activity.created_at)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-xl font-bold text-white">Workflow overview</h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Orders move through a controlled warehouse lifecycle:
+              NEW → RESERVED → PICKING → PICKED → SHIPPED.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {[
+                "NEW",
+                "RESERVED",
+                "PICKING",
+                "PICKED",
+                "SHIPPED",
+              ].map((status) => (
+                <span
+                  key={status}
+                  className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold tracking-wide text-cyan-300"
+                >
+                  {status}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4 text-sm text-slate-300">
-            <span className="font-semibold text-cyan-300">Reality check:</span>{" "}
-            this dashboard avoids fake metrics and only presents data supported by
-            the current backend contract.
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-xl font-bold text-white">Quick actions</h2>
+
+            <div className="mt-5 grid gap-3">
+              <Link
+                to="/orders"
+                className="rounded-2xl border border-slate-700 bg-slate-950/60 px-5 py-4 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+              >
+                Create and manage orders
+              </Link>
+
+              <Link
+                to="/metrics"
+                className="rounded-2xl border border-slate-700 bg-slate-950/60 px-5 py-4 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+              >
+                Inspect system metrics
+              </Link>
+            </div>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
