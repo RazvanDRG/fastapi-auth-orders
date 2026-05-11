@@ -1,108 +1,80 @@
-export type Role = 'admin' | 'operator' | 'service';
-
-export type User = {
-  id: number;
-  email: string;
-  role: Role;
-  first_name: string | null;
-  last_name: string | null;
-};
-
-export type TokenResponse = {
-  access_token: string;
-  refresh_token: string;
-  token_type: 'bearer';
-};
-
-export type AuthTokens = TokenResponse;
-
-export type RegisterPayload = {
+export interface LoginRequest {
   email: string;
   password: string;
-  first_name?: string;
-  last_name?: string;
-};
+}
 
-export type LoginPayload = {
+export interface RegisterRequest {
   email: string;
   password: string;
-};
+}
 
-export type ForgotPasswordPayload = {
+export interface ForgotPasswordRequest {
   email: string;
-};
+}
 
-export type ResetPasswordPayload = {
+export interface ResetPasswordRequest {
   email: string;
   code: string;
   new_password: string;
   confirm_password: string;
-};
+}
 
-export type OrderStatus =
-  | 'NEW'
-  | 'RESERVED'
-  | 'PICKING'
-  | 'PICKED'
-  | 'SHIPPED'
-  | 'CANCELLED'
-  | 'FAILED_RESERVATION';
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
 
-export type OrderItemCreate = {
-  product_id: number;
-  qty: number;
-};
-
-export type OrderCreatePayload = {
-  customer_id: number;
-  reference?: string;
-  items: OrderItemCreate[];
-};
-
-export type Product = {
+export interface User {
   id: number;
-  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface Product {
+  id: number;
   sku: string;
+  name: string;
   stock_qty: number;
-};
+}
 
-export type OrderItem = {
+export interface OrderItem {
   product_id: number;
   qty: number;
-  product_name?: string;
-};
+  product_name?: string | null;
+}
 
-export type Order = {
+export interface Order {
   id: number;
   customer_id: number;
-  reference?: string;
+  reference?: string | null;
   status: string;
   items: OrderItem[];
-};
+}
 
-export type MessageResponse = {
-  message: string;
-};
+export interface CreateOrderRequest {
+  customer_id: number;
+  reference?: string | null;
+  items: {
+    product_id: number;
+    qty: number;
+  }[];
+}
 
-export type OpsLiveResponse = {
-  status: string;
-  app: string;
-};
+export interface MetricsOverview {
+  users_total: number;
+  active_users: number;
+  admins_total: number;
+  operators_total: number;
+}
 
-export type OpsReadyResponse = {
-  status: string;
-  db: string;
-};
-
-export type RoleUpdatePayload = {
-  role: Role;
-};
-
-export type ApiErrorResponse = {
-  detail?: string | { msg?: string }[];
-  request_id?: string;
-};
-
-export type RequestMeta = {
-  requestId?: string;
-};
+export interface ActivityFeedItem {
+  type: "order" | "admin";
+  title: string;
+  description: string;
+  actor_user_id: number | null;
+  actor_role: string | null;
+  created_at: string;
+}
