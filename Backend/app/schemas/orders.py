@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.models.order import OrderStatus
+from datetime import datetime
 
 class OrderItemCreate(BaseModel):
     product_id: int = Field(..., examples=[1])
@@ -37,6 +38,20 @@ class OrderOut(BaseModel):
     reference: Optional[str]
     status: OrderStatus
     items: list[OrderItemOut] = []
+
+    class Config:
+        from_attributes = True
+        
+class OrderEventOut(BaseModel):
+    id: int
+    order_id: int
+    action: str
+    from_status: str | None = None
+    to_status: str | None = None
+    actor_user_id: int | None = None
+    actor_role: str | None = None
+    request_id: str | None = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
