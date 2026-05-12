@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { http } from "../lib/http";
@@ -51,21 +51,29 @@ function formatRelativeTime(dateString: string) {
 export function DashboardPage() {
   const location = useLocation();
 
-  const loginToastShown = useRef(false);
-
   const [metrics, setMetrics] = useState<DashboardMetrics>(initialMetrics);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (location.state?.loginSuccess && !loginToastShown.current) {
-      loginToastShown.current = true;
+    if (!location.state?.loginSuccess) return;
 
-      toast.success("Welcome back.");
+    const toastKey = "dashboard_welcome_toast_shown";
 
-      window.history.replaceState({}, document.title);
+    if (!sessionStorage.getItem(toastKey)) {
+      sessionStorage.setItem(toastKey, "true");
+
+      toast.success("Welcome back.", {
+        id: "dashboard-welcome-toast",
+      });
     }
+
+    window.history.replaceState({}, document.title);
+
+    return () => {
+      sessionStorage.removeItem(toastKey);
+    };
   }, [location.state]);
 
   useEffect(() => {

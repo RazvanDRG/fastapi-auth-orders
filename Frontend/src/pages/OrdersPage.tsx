@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import CreateOrderForm from "../components/orders/CreateOrderForm";
 import { http } from "../lib/http";
@@ -41,9 +41,7 @@ const actionsByStatus: Record<string, OrderAction[]> = {
     { key: "confirm-pick", label: "Confirm pick" },
     { key: "cancel", label: "Cancel", danger: true },
   ],
-  PICKED: [
-    { key: "ship", label: "Ship" },
-  ],
+  PICKED: [{ key: "ship", label: "Ship" }],
   SHIPPED: [],
   CANCELLED: [],
 };
@@ -56,14 +54,8 @@ function getStatusClasses(status?: string) {
 }
 
 function getWorkflowStepClasses(current: boolean, completed: boolean) {
-  if (current) {
-    return "border-orange-400 bg-orange-400/15 text-orange-300";
-  }
-
-  if (completed) {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-  }
-
+  if (current) return "border-orange-400 bg-orange-400/15 text-orange-300";
+  if (completed) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
   return "border-rose-500/25 bg-rose-500/10 text-rose-300";
 }
 
@@ -87,6 +79,12 @@ export default function OrdersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
+  const selectedOrderIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrder?.id ?? null;
+  }, [selectedOrder?.id]);
+
   const currentStepIndex = useMemo(() => {
     if (!selectedOrder?.status) return -1;
     return workflowSteps.indexOf(selectedOrder.status.toUpperCase());
@@ -95,23 +93,6 @@ export default function OrdersPage() {
   const availableActions = selectedOrder
     ? actionsByStatus[selectedOrder.status?.toUpperCase()] ?? []
     : [];
-
-  async function fetchMyOrders(options?: { silent?: boolean }) {
-    try {
-      setLoadingMyOrders(true);
-
-      const response = await http.get<Order[]>("/orders/my");
-      setMyOrders(response.data);
-
-      if (!options?.silent) {
-        toast.success("Orders list refreshed.");
-      }
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to load your orders."));
-    } finally {
-      setLoadingMyOrders(false);
-    }
-  }
 
   const orderStats = useMemo(() => {
     const normalized = myOrders.map((order) => order.status?.toUpperCase());
@@ -127,18 +108,47 @@ export default function OrdersPage() {
     };
   }, [myOrders]);
 
+  async function fetchMyOrders(options?: { silent?: boolean }) {
+    try {
+      if (!options?.silent) {
+        setLoadingMyOrders(true);
+      }
+
+      const response = await http.get<Order[]>("/orders/my");
+      setMyOrders(response.data);
+
+      if (!options?.silent) {
+        toast.success("Orders list refreshed.");
+      }
+    } catch (err: unknown) {
+      if (!options?.silent) {
+        toast.error(getErrorMessage(err, "Failed to load your orders."));
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoadingMyOrders(false);
+      }
+    }
+  }
+
   async function fetchOrderById(id?: number, options?: { silent?: boolean }) {
     const parsedId = id ?? Number(orderIdInput);
 
-    setFormError("");
+    if (!options?.silent) {
+      setFormError("");
+    }
 
     if (!parsedId || Number.isNaN(parsedId) || parsedId <= 0) {
-      setFormError("Enter a valid order ID.");
+      if (!options?.silent) {
+        setFormError("Enter a valid order ID.");
+      }
       return;
     }
 
     try {
-      setLoadingOrder(true);
+      if (!options?.silent) {
+        setLoadingOrder(true);
+      }
 
       const response = await http.get<Order>(`/orders/${parsedId}`);
       setSelectedOrder(response.data);
@@ -148,12 +158,16 @@ export default function OrdersPage() {
         toast.success(`Order ${parsedId} loaded.`);
       }
     } catch (err: unknown) {
-      setSelectedOrder(null);
-      toast.error(
-        getErrorMessage(err, "Failed to load order. Check the ID and try again.")
-      );
+      if (!options?.silent) {
+        setSelectedOrder(null);
+        toast.error(
+          getErrorMessage(err, "Failed to load order. Check the ID and try again.")
+        );
+      }
     } finally {
-      setLoadingOrder(false);
+      if (!options?.silent) {
+        setLoadingOrder(false);
+      }
     }
   }
 
@@ -186,6 +200,16 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchMyOrders({ silent: true });
+
+    const interval = setInterval(() => {
+      fetchMyOrders({ silent: true });
+
+      if (selectedOrderIdRef.current) {
+        fetchOrderById(selectedOrderIdRef.current, { silent: true });
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -254,6 +278,7 @@ export default function OrdersPage() {
 
             <div className="md:self-end">
               <button
+                type="button"
                 onClick={() => fetchOrderById()}
                 disabled={loadingOrder}
                 className="w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto"
@@ -368,6 +393,7 @@ export default function OrdersPage() {
                         return (
                           <button
                             key={action.key}
+                            type="button"
                             onClick={() => runOrderAction(action.key)}
                             disabled={!!actionLoading}
                             className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -416,11 +442,13 @@ export default function OrdersPage() {
           </div>
         </section>
       </div>
-      
+
       <section className="grid gap-4 md:grid-cols-5">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">Total orders</p>
-          <p className="mt-2 text-3xl font-bold text-white">{orderStats.total}</p>
+          <p className="mt-2 text-3xl font-bold text-white">
+            {orderStats.total}
+          </p>
         </div>
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
@@ -514,43 +542,29 @@ export default function OrdersPage() {
                   </span>
                 </p>
 
-                <div className="mt-3 space-y-1 text-sm text-slate-400">
+                <div className="mt-4 space-y-2">
                   {order.items?.length ? (
                     order.items.map((item, index) => (
-                      <p key={`${order.id}-${item.product_id}-${index}`}>
-                        {item.product_name || `Product #${item.product_id}`} ×{" "}
-                        {item.qty}
-                      </p>
+                      <div
+                        key={`${order.id}-${item.product_id}-${index}`}
+                        className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
+                      >
+                        <div>
+                          <p className="font-medium text-white">
+                            {item.product_name ?? `Product #${item.product_id}`}
+                          </p>
+                          <p className="text-sm text-slate-400">
+                            Product ID: {item.product_id}
+                          </p>
+                        </div>
+
+                        <div className="rounded-full bg-cyan-500/10 px-3 py-1 text-sm font-semibold text-cyan-300">
+                          Qty: {item.qty}
+                        </div>
+                      </div>
                     ))
                   ) : (
-                    <div className="mt-4 space-y-2">
-                      {order.items?.length ? (
-                        order.items.map((item) => (
-                          <div
-                            key={`${order.id}-${item.product_id}`}
-                            className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
-                          >
-                            <div>
-                              <p className="font-medium text-white">
-                                {item.product_name ?? `Product #${item.product_id}`}
-                              </p>
-
-                              <p className="text-sm text-slate-400">
-                                Product ID: {item.product_id}
-                              </p>
-                            </div>
-
-                            <div className="rounded-full bg-cyan-500/10 px-3 py-1 text-sm font-semibold text-cyan-300">
-                              Qty: {item.qty}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-500">
-                          No items returned.
-                        </p>
-                      )}
-                    </div>
+                    <p className="text-sm text-slate-500">No items returned.</p>
                   )}
                 </div>
               </button>
