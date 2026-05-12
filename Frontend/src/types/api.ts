@@ -25,10 +25,12 @@ export interface AuthResponse {
   token_type: string;
 }
 
+export type Role = "admin" | "operator" | "service";
+
 export interface User {
   id: number;
   email: string;
-  role: string;
+  role: Role;
   is_active: boolean;
   created_at?: string;
 }
