@@ -26,26 +26,70 @@ const initialMetrics: DashboardMetrics = {
 function formatRelativeTime(dateString: string) {
   const now = new Date().getTime();
   const created = new Date(dateString).getTime();
-
   const diffSeconds = Math.floor((now - created) / 1000);
 
   if (diffSeconds < 60) return "Just now";
 
   const minutes = Math.floor(diffSeconds / 60);
-
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
+  if (minutes < 60) return `${minutes}m ago`;
 
   const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) {
-    return `${hours}h ago`;
-  }
+  if (hours < 24) return `${hours}h ago`;
 
   const days = Math.floor(hours / 24);
-
   return `${days}d ago`;
+}
+
+function getActivityAccent(description: string) {
+  const value = description.toLowerCase();
+
+  if (value.includes("shipped")) {
+    return {
+      dot: "bg-emerald-400 shadow-emerald-500/40",
+      badge: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+    };
+  }
+
+  if (value.includes("cancel")) {
+    return {
+      dot: "bg-rose-400 shadow-rose-500/40",
+      badge: "border-rose-500/20 bg-rose-500/10 text-rose-300",
+    };
+  }
+
+  if (value.includes("pick")) {
+    return {
+      dot: "bg-cyan-400 shadow-cyan-500/40",
+      badge: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300",
+    };
+  }
+
+  if (value.includes("reserve")) {
+    return {
+      dot: "bg-amber-400 shadow-amber-500/40",
+      badge: "border-amber-500/20 bg-amber-500/10 text-amber-300",
+    };
+  }
+
+  return {
+    dot: "bg-violet-400 shadow-violet-500/40",
+    badge: "border-violet-500/20 bg-violet-500/10 text-violet-300",
+  };
+}
+
+function getActorLabel(role?: string | null, id?: number | null) {
+  if (!id) return "System";
+
+  switch ((role || "").toLowerCase()) {
+    case "admin":
+      return `Admin #${id}`;
+    case "operator":
+      return `Operator #${id}`;
+    case "service":
+      return `Service #${id}`;
+    default:
+      return `User #${id}`;
+  }
 }
 
 export function DashboardPage() {
@@ -115,24 +159,19 @@ export function DashboardPage() {
           case "NEW":
             nextMetrics.newOrders += 1;
             break;
-
           case "RESERVED":
             nextMetrics.reservedOrders += 1;
             break;
-
           case "PICKING":
           case "PICKED":
             nextMetrics.inProgressOrders += 1;
             break;
-
           case "SHIPPED":
             nextMetrics.shippedOrders += 1;
             break;
-
           case "CANCELLED":
             nextMetrics.cancelledOrders += 1;
             break;
-
           default:
             break;
         }
@@ -254,16 +293,15 @@ export function DashboardPage() {
         <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">
-                Recent activity
-              </h2>
+              <h2 className="text-xl font-bold text-white">Recent activity</h2>
 
               <p className="mt-1 text-sm text-slate-400">
-                Real operational events from the backend activity feed.
+                Live operational events from order and admin audit streams.
               </p>
             </div>
 
             <button
+              type="button"
               onClick={() => loadDashboard(false)}
               className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
             >
@@ -274,55 +312,66 @@ export function DashboardPage() {
           <div className="space-y-3">
             {activityFeed.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-                No activity available yet.
+                No operational events detected yet.
               </div>
             ) : (
-              activityFeed.map((activity, index) => (
-                <div
-                  key={`${activity.title}-${index}`}
-                  className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 transition hover:border-cyan-500/30"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex gap-4">
-                      <div
-                        className={`mt-1 h-3 w-3 rounded-full ${
-                          activity.type === "order"
-                            ? "bg-cyan-400 shadow-lg shadow-cyan-500/40"
-                            : "bg-violet-400 shadow-lg shadow-violet-500/40"
-                        }`}
-                      />
+              activityFeed.map((activity, index) => {
+                const accent = getActivityAccent(activity.description);
 
-                      <div>
-                        <p className="font-semibold text-white">
-                          {activity.title}
-                        </p>
+                return (
+                  <div
+                    key={`${activity.title}-${activity.created_at}-${index}`}
+                    className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 transition hover:border-cyan-500/30"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex gap-4">
+                        <div
+                          className={`mt-1 h-3 w-3 rounded-full shadow-lg ${accent.dot}`}
+                        />
 
-                        <p className="mt-1 text-sm text-slate-400">
-                          {activity.description}
-                        </p>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-white">
+                              {activity.title}
+                            </p>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {activity.actor_user_id && (
+                            <span
+                              className={`rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide ${accent.badge}`}
+                            >
+                              {activity.type}
+                            </span>
+                          </div>
+
+                          <p className="mt-2 text-sm text-slate-400">
+                            {activity.description}
+                          </p>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
                             <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
-                              User #{activity.actor_user_id}
+                              {getActorLabel(
+                                activity.actor_role,
+                                activity.actor_user_id
+                              )}
                             </span>
-                          )}
 
-                          {activity.actor_role && (
-                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-300">
-                              {activity.actor_role}
-                            </span>
-                          )}
+                            {activity.actor_role && (
+                              <span
+                                className={`rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide ${accent.badge}`}
+                              >
+                                {activity.actor_role}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <span className="whitespace-nowrap text-xs text-slate-500">
-                      {formatRelativeTime(activity.created_at)}
-                    </span>
+                      <span className="whitespace-nowrap text-xs text-slate-500">
+                        {formatRelativeTime(activity.created_at)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -337,20 +386,16 @@ export function DashboardPage() {
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {[
-                "NEW",
-                "RESERVED",
-                "PICKING",
-                "PICKED",
-                "SHIPPED",
-              ].map((status) => (
-                <span
-                  key={status}
-                  className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold tracking-wide text-cyan-300"
-                >
-                  {status}
-                </span>
-              ))}
+              {["NEW", "RESERVED", "PICKING", "PICKED", "SHIPPED"].map(
+                (status) => (
+                  <span
+                    key={status}
+                    className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold tracking-wide text-cyan-300"
+                  >
+                    {status}
+                  </span>
+                )
+              )}
             </div>
           </div>
 
