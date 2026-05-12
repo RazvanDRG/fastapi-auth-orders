@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useAuth } from "../context/AuthContext";
 import CreateOrderForm from "../components/orders/CreateOrderForm";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
-import type { Order } from "../types/api";
+import type { Order, OrderEvent } from "../types/api";
 
 type OrderAction = {
   key: string;
@@ -59,23 +60,32 @@ function getWorkflowStepClasses(current: boolean, completed: boolean) {
   return "border-rose-500/25 bg-rose-500/10 text-rose-300";
 }
 
-function prettyStatus(status?: string) {
+function prettyStatus(status?: string | null) {
   if (!status) return "-";
 
   return status
+    .replace("OrderStatus.", "")
     .split("_")
     .join(" ")
     .toLowerCase()
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
+function formatDateTime(dateString: string) {
+  return new Date(dateString).toLocaleString();
+}
+
 export default function OrdersPage() {
+  const { user } = useAuth();
+
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [orderIdInput, setOrderIdInput] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderEvents, setOrderEvents] = useState<OrderEvent[]>([]);
 
   const [loadingMyOrders, setLoadingMyOrders] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
@@ -131,6 +141,28 @@ export default function OrdersPage() {
     }
   }
 
+  async function fetchOrderEvents(
+    orderId: number,
+    options?: { silent?: boolean }
+  ) {
+    try {
+      if (!options?.silent) {
+        setLoadingEvents(true);
+      }
+
+      const response = await http.get<OrderEvent[]>(`/orders/${orderId}/events`);
+      setOrderEvents(response.data);
+    } catch (err: unknown) {
+      if (!options?.silent) {
+        toast.error(getErrorMessage(err, "Failed to load order timeline."));
+      }
+    } finally {
+      if (!options?.silent) {
+        setLoadingEvents(false);
+      }
+    }
+  }
+
   async function fetchOrderById(id?: number, options?: { silent?: boolean }) {
     const parsedId = id ?? Number(orderIdInput);
 
@@ -154,12 +186,15 @@ export default function OrdersPage() {
       setSelectedOrder(response.data);
       setOrderIdInput(String(parsedId));
 
+      await fetchOrderEvents(parsedId, { silent: options?.silent });
+
       if (!options?.silent) {
         toast.success(`Order ${parsedId} loaded.`);
       }
     } catch (err: unknown) {
       if (!options?.silent) {
         setSelectedOrder(null);
+        setOrderEvents([]);
         toast.error(
           getErrorMessage(err, "Failed to load order. Check the ID and try again.")
         );
@@ -184,6 +219,7 @@ export default function OrdersPage() {
       await http.post(`/orders/${selectedOrder.id}/${action}`);
       await fetchOrderById(selectedOrder.id, { silent: true });
       await fetchMyOrders({ silent: true });
+      await fetchOrderEvents(selectedOrder.id, { silent: true });
 
       toast.success(`Action "${action}" completed for order ${selectedOrder.id}.`);
     } catch (err: unknown) {
@@ -206,6 +242,7 @@ export default function OrdersPage() {
 
       if (selectedOrderIdRef.current) {
         fetchOrderById(selectedOrderIdRef.current, { silent: true });
+        fetchOrderEvents(selectedOrderIdRef.current, { silent: true });
       }
     }, 10000);
 
@@ -241,6 +278,7 @@ export default function OrdersPage() {
               setOrderIdInput(String(id));
               fetchOrderById(id, { silent: true });
               fetchMyOrders({ silent: true });
+              fetchOrderEvents(id, { silent: true });
             }}
           />
         </section>
@@ -358,8 +396,7 @@ export default function OrdersPage() {
                   <div className="flex flex-wrap gap-3">
                     {workflowSteps.map((step, index) => {
                       const completed = currentStepIndex > index;
-                      const current =
-                        selectedOrder.status?.toUpperCase() === step;
+                      const current = selectedOrder.status?.toUpperCase() === step;
 
                       return (
                         <div
@@ -437,6 +474,62 @@ export default function OrdersPage() {
                     </div>
                   )}
                 </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
+                  <h4 className="mb-4 text-lg font-semibold text-white">
+                    Order timeline
+                  </h4>
+
+                  {loadingEvents ? (
+                    <p className="text-sm text-slate-400">Loading timeline...</p>
+                  ) : orderEvents.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+                      No timeline events recorded yet.
+                    </div>
+                  ) : (
+                    <div className="relative space-y-4">
+                      {orderEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="relative rounded-2xl border border-slate-800 bg-slate-900/50 p-4"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                                {event.action}
+                              </p>
+
+                              <p className="mt-2 text-base font-bold text-white">
+                                {prettyStatus(event.from_status)} →{" "}
+                                {prettyStatus(event.to_status)}
+                              </p>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300">
+                                  User ID #{event.actor_user_id ?? "-"}
+                                </span>
+
+                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-300">
+                                  {event.actor_role || "system"}
+                                </span>
+
+                                {user?.role === "admin" && event.request_id && (
+                                  <span className="max-w-full truncate rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-400">
+                                    Request: {event.request_id}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <span className="whitespace-nowrap text-xs text-slate-500">
+                              {formatDateTime(event.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -446,9 +539,7 @@ export default function OrdersPage() {
       <section className="grid gap-4 md:grid-cols-5">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">Total orders</p>
-          <p className="mt-2 text-3xl font-bold text-white">
-            {orderStats.total}
-          </p>
+          <p className="mt-2 text-3xl font-bold text-white">{orderStats.total}</p>
         </div>
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">

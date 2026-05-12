@@ -7,7 +7,8 @@ from app.db.session import get_db
 from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
 from app.models.user import User
-from app.schemas.orders import OrderCreate, OrderOut
+from app.schemas.orders import OrderCreate, OrderOut, OrderEventOut
+from app.models.order_event import OrderEvent
 from app.core.roles import Roles
 from app.services.orders_service import (
     get_order,
@@ -20,6 +21,7 @@ from app.services.orders_service import (
 )
 from app.models.product import Product
 from sqlalchemy import select
+
 
 router = APIRouter(
     prefix="/orders",
@@ -194,4 +196,21 @@ def retry_reserve(
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
+    )
+    
+@router.get(
+    "/{order_id}/events",
+    response_model=list[OrderEventOut],
+    summary="Get order events",
+)
+def get_order_events(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(OrderEvent)
+        .filter(OrderEvent.order_id == order_id)
+        .order_by(OrderEvent.created_at.desc())
+        .all()
     )

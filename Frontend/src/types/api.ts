@@ -80,3 +80,15 @@ export interface ActivityFeedItem {
   actor_role: string | null;
   created_at: string;
 }
+
+export interface OrderEvent {
+  id: number;
+  order_id: number;
+  action: string;
+  from_status: string | null;
+  to_status: string | null;
+  actor_user_id: number | null;
+  actor_role: string | null;
+  request_id: string | null;
+  created_at: string;
+}
