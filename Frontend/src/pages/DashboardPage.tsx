@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { http } from "../lib/http";
@@ -51,24 +51,40 @@ function formatRelativeTime(dateString: string) {
 export function DashboardPage() {
   const location = useLocation();
 
+  const loginToastShown = useRef(false);
+
   const [metrics, setMetrics] = useState<DashboardMetrics>(initialMetrics);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (location.state?.loginSuccess) {
+    if (location.state?.loginSuccess && !loginToastShown.current) {
+      loginToastShown.current = true;
+
       toast.success("Welcome back.");
+
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
   useEffect(() => {
-    loadDashboard();
+    loadDashboard(true);
+
+    const interval = setInterval(() => {
+      loadDashboard(false);
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  async function loadDashboard() {
+  async function loadDashboard(showLoader = false) {
     try {
-      setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
 
       const [ordersResponse, activityResponse] = await Promise.all([
         http.get("/orders/my"),
@@ -117,9 +133,12 @@ export function DashboardPage() {
       setMetrics(nextMetrics);
       setActivityFeed(activityResponse.data ?? []);
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to load dashboard."));
+      if (showLoader) {
+        toast.error(getErrorMessage(err, "Failed to load dashboard."));
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -209,8 +228,14 @@ export function DashboardPage() {
                 {loading ? "--" : card.value}
               </span>
 
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
-                Live
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition ${
+                  refreshing
+                    ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+                    : "border-white/10 bg-white/5 text-slate-300"
+                }`}
+              >
+                {refreshing ? "Refreshing" : "Live"}
               </span>
             </div>
           </div>
@@ -231,7 +256,7 @@ export function DashboardPage() {
             </div>
 
             <button
-              onClick={loadDashboard}
+              onClick={() => loadDashboard(false)}
               className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
             >
               Refresh
