@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
-import type { ActivityFeedItem, OrderEvent } from "../types/api";
+import type { ActivityFeedItem, Order, OrderEvent } from "../types/api";
 
 type DashboardMetrics = {
   totalOrders: number;
@@ -13,6 +13,8 @@ type DashboardMetrics = {
   shippedOrders: number;
   cancelledOrders: number;
 };
+
+type PaginationItem = number | "ellipsis";
 
 const initialMetrics: DashboardMetrics = {
   totalOrders: 0,
@@ -149,6 +151,36 @@ function getEventSearchText(activity: ActivityFeedItem) {
     .toLowerCase();
 }
 
+function getPaginationItems(
+  currentPage: number,
+  totalPages: number
+): PaginationItem[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set<number>([1, 2, totalPages - 1, totalPages]);
+
+  if (currentPage > 2 && currentPage < totalPages - 1) {
+    pages.add(currentPage);
+  }
+
+  const sortedPages = Array.from(pages).sort((a, b) => a - b);
+  const items: PaginationItem[] = [];
+
+  sortedPages.forEach((page, index) => {
+    const previousPage = sortedPages[index - 1];
+
+    if (index > 0 && previousPage && page - previousPage > 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(page);
+  });
+
+  return items;
+}
+
 export function DashboardPage() {
   const location = useLocation();
 
@@ -161,7 +193,9 @@ export function DashboardPage() {
 
   const [orderLookupInput, setOrderLookupInput] = useState("");
   const [searchedOrderId, setSearchedOrderId] = useState<number | null>(null);
-  const [searchedOrderEvents, setSearchedOrderEvents] = useState<OrderEvent[]>([]);
+  const [searchedOrderEvents, setSearchedOrderEvents] = useState<OrderEvent[]>(
+    []
+  );
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -244,6 +278,12 @@ export function DashboardPage() {
     activityPage * ACTIVITY_PAGE_SIZE
   );
 
+  useEffect(() => {
+    if (activityPage > totalActivityPages) {
+      setActivityPage(totalActivityPages);
+    }
+  }, [activityPage, totalActivityPages]);
+
   async function loadDashboard(showLoader = false) {
     try {
       if (showLoader) {
@@ -253,7 +293,7 @@ export function DashboardPage() {
       }
 
       const [ordersResponse, activityResponse] = await Promise.all([
-        http.get("/orders/my"),
+        http.get<Order[]>("/orders/my"),
         http.get<ActivityFeedItem[]>(`/ops/activity?limit=100&t=${Date.now()}`),
       ]);
 
@@ -692,24 +732,63 @@ export function DashboardPage() {
 
           {filteredActivityFeed.length > ACTIVITY_PAGE_SIZE && (
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              {Array.from({ length: totalActivityPages }, (_, index) => {
-                const page = index + 1;
+              <button
+                type="button"
+                onClick={() =>
+                  setActivityPage((currentPage) =>
+                    Math.max(1, currentPage - 1)
+                  )
+                }
+                disabled={activityPage === 1}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Previous activity page"
+              >
+                ←
+              </button>
 
-                return (
-                  <button
-                    key={page}
-                    type="button"
-                    onClick={() => setActivityPage(page)}
-                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                      activityPage === page
-                        ? "border-cyan-400 bg-cyan-400/15 text-cyan-300"
-                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-200"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
+              {getPaginationItems(activityPage, totalActivityPages).map(
+                (item, index) => {
+                  if (item === "ellipsis") {
+                    return (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="px-2 text-sm font-semibold text-slate-500"
+                      >
+                        …
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setActivityPage(item)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        activityPage === item
+                          ? "border-cyan-400 bg-cyan-400/15 text-cyan-300"
+                          : "border-slate-700 bg-slate-950 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-200"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  );
+                }
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setActivityPage((currentPage) =>
+                    Math.min(totalActivityPages, currentPage + 1)
+                  )
+                }
+                disabled={activityPage === totalActivityPages}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-400 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Next activity page"
+              >
+                →
+              </button>
             </div>
           )}
         </div>
