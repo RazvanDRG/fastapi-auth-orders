@@ -24,6 +24,7 @@ const statusToneMap: Record<string, string> = {
 };
 
 const workflowSteps = ["NEW", "RESERVED", "PICKING", "PICKED", "SHIPPED"];
+const ORDERS_PAGE_SIZE = 8;
 
 const actionsByStatus: Record<string, OrderAction[]> = {
   NEW: [
@@ -56,7 +57,9 @@ function getStatusClasses(status?: string) {
 
 function getWorkflowStepClasses(current: boolean, completed: boolean) {
   if (current) return "border-orange-400 bg-orange-400/15 text-orange-300";
-  if (completed) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (completed)
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+
   return "border-rose-500/25 bg-rose-500/10 text-rose-300";
 }
 
@@ -75,10 +78,36 @@ function formatDateTime(dateString: string) {
   return new Date(dateString).toLocaleString();
 }
 
+function getPaginationItems(current: number, total: number) {
+  if (total <= 6) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  const items: (number | string)[] = [1, 2];
+
+  if (current > 4) {
+    items.push("...");
+  }
+
+  if (current > 3 && current < total - 2) {
+    items.push(current);
+  }
+
+  if (current < total - 3) {
+    items.push("...");
+  }
+
+  items.push(total - 1, total);
+
+  return [...new Set(items)];
+}
+
 export default function OrdersPage() {
   const { user } = useAuth();
 
   const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [ordersPage, setOrdersPage] = useState(1);
+
   const [orderIdInput, setOrderIdInput] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderEvents, setOrderEvents] = useState<OrderEvent[]>([]);
@@ -117,6 +146,26 @@ export default function OrdersPage() {
       cancelled: normalized.filter((status) => status === "CANCELLED").length,
     };
   }, [myOrders]);
+
+  const sortedOrders = useMemo(() => {
+    return [...myOrders].sort((a, b) => b.id - a.id);
+  }, [myOrders]);
+
+  const totalOrderPages = Math.max(
+    1,
+    Math.ceil(sortedOrders.length / ORDERS_PAGE_SIZE)
+  );
+
+  const paginatedOrders = sortedOrders.slice(
+    (ordersPage - 1) * ORDERS_PAGE_SIZE,
+    ordersPage * ORDERS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (ordersPage > totalOrderPages) {
+      setOrdersPage(totalOrderPages);
+    }
+  }, [ordersPage, totalOrderPages]);
 
   async function fetchMyOrders(options?: { silent?: boolean }) {
     try {
@@ -174,6 +223,7 @@ export default function OrdersPage() {
       if (!options?.silent) {
         setFormError("Enter a valid order ID.");
       }
+
       return;
     }
 
@@ -255,6 +305,7 @@ export default function OrdersPage() {
         <h1 className="text-4xl font-bold tracking-tight text-white">
           Orders workflow
         </h1>
+
         <p className="mt-2 text-sm text-slate-300">
           Create an order from product cards, review your orders, then drive the
           warehouse lifecycle.
@@ -291,6 +342,7 @@ export default function OrdersPage() {
             <h2 className="text-2xl font-semibold text-white">
               Load and operate
             </h2>
+
             <p className="mt-1 text-sm text-slate-400">
               Continue an existing order by ID and execute lifecycle actions.
             </p>
@@ -301,6 +353,7 @@ export default function OrdersPage() {
               <label className="mb-2 block text-sm font-medium text-slate-200">
                 Order ID
               </label>
+
               <input
                 type="number"
                 min={1}
@@ -345,6 +398,7 @@ export default function OrdersPage() {
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                         Order
                       </p>
+
                       <h3 className="mt-1 text-2xl font-bold text-white">
                         #{selectedOrder.id}
                       </h3>
@@ -364,6 +418,7 @@ export default function OrdersPage() {
                       <p className="text-xs uppercase tracking-wide text-slate-500">
                         Customer ID
                       </p>
+
                       <p className="mt-2 text-lg font-semibold text-white">
                         {selectedOrder.customer_id}
                       </p>
@@ -373,6 +428,7 @@ export default function OrdersPage() {
                       <p className="text-xs uppercase tracking-wide text-slate-500">
                         Reference
                       </p>
+
                       <p className="mt-2 break-all text-lg font-semibold text-white">
                         {selectedOrder.reference || "-"}
                       </p>
@@ -385,6 +441,7 @@ export default function OrdersPage() {
                     <h4 className="text-lg font-semibold text-white">
                       Workflow
                     </h4>
+
                     <p className="text-sm text-slate-400">
                       Current status:{" "}
                       <span className="font-medium text-orange-300">
@@ -462,6 +519,7 @@ export default function OrdersPage() {
                           <p className="font-semibold text-white">
                             {item.product_name || `Product #${item.product_id}`}
                           </p>
+
                           <p className="mt-1 text-sm text-slate-400">
                             Product ID: {item.product_id} · Quantity: {item.qty}
                           </p>
@@ -481,7 +539,9 @@ export default function OrdersPage() {
                   </h4>
 
                   {loadingEvents ? (
-                    <p className="text-sm text-slate-400">Loading timeline...</p>
+                    <p className="text-sm text-slate-400">
+                      Loading timeline...
+                    </p>
                   ) : orderEvents.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
                       No timeline events recorded yet.
@@ -510,7 +570,7 @@ export default function OrdersPage() {
                                 </span>
 
                                 <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-300">
-                                  {event.actor_role || "system"}
+                                  {event.actor_role || "unknown"}
                                 </span>
 
                                 {user?.role === "admin" && event.request_id && (
@@ -539,7 +599,9 @@ export default function OrdersPage() {
       <section className="grid gap-4 md:grid-cols-5">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">Total orders</p>
-          <p className="mt-2 text-3xl font-bold text-white">{orderStats.total}</p>
+          <p className="mt-2 text-3xl font-bold text-white">
+            {orderStats.total}
+          </p>
         </div>
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
@@ -575,6 +637,7 @@ export default function OrdersPage() {
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-white">My orders</h2>
+
             <p className="mt-1 text-sm text-slate-400">
               Orders created by the currently authenticated user.
             </p>
@@ -595,72 +658,140 @@ export default function OrdersPage() {
             No orders created yet.
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {myOrders.map((order) => (
-              <button
-                key={order.id}
-                type="button"
-                onClick={() => fetchOrderById(order.id, { silent: true })}
-                className={`cursor-pointer rounded-3xl border p-5 text-left transition-all duration-200 ${
-                  selectedOrder?.id === order.id
-                    ? "border-cyan-400 bg-cyan-400/5 shadow-lg shadow-cyan-500/10"
-                    : "border-slate-800 bg-slate-900/60 hover:border-cyan-500/40"
-                }`}
-              >
-                <div className="mb-3 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                      Order
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-white">
-                      #{order.id}
-                    </p>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {paginatedOrders.map((order) => (
+                <button
+                  key={order.id}
+                  type="button"
+                  onClick={() => fetchOrderById(order.id, { silent: true })}
+                  className={`cursor-pointer rounded-3xl border p-4 text-left transition-all duration-200 ${
+                    selectedOrder?.id === order.id
+                      ? "border-cyan-400 bg-cyan-400/5 shadow-lg shadow-cyan-500/10"
+                      : "border-slate-800 bg-slate-900/60 hover:border-cyan-500/40"
+                  }`}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                        Order
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-white">
+                        #{order.id}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(
+                        order.status
+                      )}`}
+                    >
+                      {prettyStatus(order.status)}
+                    </span>
                   </div>
 
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(
-                      order.status
-                    )}`}
-                  >
-                    {prettyStatus(order.status)}
-                  </span>
-                </div>
+                  <p className="text-sm text-slate-400">
+                    Reference:{" "}
+                    <span className="text-slate-200">
+                      {order.reference || "-"}
+                    </span>
+                  </p>
 
-                <p className="text-sm text-slate-400">
-                  Reference:{" "}
-                  <span className="text-slate-200">
-                    {order.reference || "-"}
-                  </span>
-                </p>
+                  <div className="mt-4 space-y-2">
+                    {order.items?.length ? (
+                      <>
+                        {order.items.slice(0, 2).map((item, index) => (
+                          <div
+                            key={`${order.id}-${item.product_id}-${index}`}
+                            className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">
+                                {item.product_name ??
+                                  `Product #${item.product_id}`}
+                              </p>
 
-                <div className="mt-4 space-y-2">
-                  {order.items?.length ? (
-                    order.items.map((item, index) => (
-                      <div
-                        key={`${order.id}-${item.product_id}-${index}`}
-                        className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3"
+                              <p className="text-xs text-slate-400">
+                                Product ID: {item.product_id}
+                              </p>
+                            </div>
+
+                            <div className="ml-3 shrink-0 rounded-full bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-300">
+                              Qty: {item.qty}
+                            </div>
+                          </div>
+                        ))}
+
+                        {order.items.length > 2 && (
+                          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-400">
+                            +{order.items.length - 2} more items
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        No items returned.
+                      </p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {sortedOrders.length > ORDERS_PAGE_SIZE && (
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  disabled={ordersPage === 1}
+                  onClick={() =>
+                    setOrdersPage((prev) => Math.max(1, prev - 1))
+                  }
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ←
+                </button>
+
+                {getPaginationItems(ordersPage, totalOrderPages).map(
+                  (item, index) =>
+                    item === "..." ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="px-2 text-slate-500"
                       >
-                        <div>
-                          <p className="font-medium text-white">
-                            {item.product_name ?? `Product #${item.product_id}`}
-                          </p>
-                          <p className="text-sm text-slate-400">
-                            Product ID: {item.product_id}
-                          </p>
-                        </div>
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setOrdersPage(Number(item))}
+                        className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                          ordersPage === item
+                            ? "border-cyan-400 bg-cyan-400/15 text-cyan-300"
+                            : "border-slate-700 bg-slate-950 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-200"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    )
+                )}
 
-                        <div className="rounded-full bg-cyan-500/10 px-3 py-1 text-sm font-semibold text-cyan-300">
-                          Qty: {item.qty}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No items returned.</p>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
+                <button
+                  type="button"
+                  disabled={ordersPage === totalOrderPages}
+                  onClick={() =>
+                    setOrdersPage((prev) =>
+                      Math.min(totalOrderPages, prev + 1)
+                    )
+                  }
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
