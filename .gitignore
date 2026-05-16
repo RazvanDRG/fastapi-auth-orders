@@ -72,3 +72,8 @@ coverage/
 
 # cache
 .cache/
+
+.venv/
+Frontend/node_modules/
+__pycache__/
+.pytest_cache/
