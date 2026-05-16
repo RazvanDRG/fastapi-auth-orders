@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -85,6 +86,13 @@ def get_order(db: Session, order_id: int) -> Order:
 
     return order
 
+def schedule_order_archive(order: Order) -> None:
+    """
+    Final orders are archived 5 minutes after reaching
+    SHIPPED or CANCELLED state.
+    """
+    order.archive_due_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    order.archived_at = None
 
 def transition(
     db: Session,
@@ -245,6 +253,9 @@ def ship_order_flow(db: Session, order_id: int, actor=None, request_id: str | No
         )
 
     transition(db, order, OrderStatus.SHIPPED, actor=actor, request_id=request_id)
+
+    schedule_order_archive(order)
+
     db.commit()
     db.refresh(order)
     return order
@@ -264,6 +275,9 @@ def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | 
             restock_for_order(db, order_id)
 
         transition(db, order, OrderStatus.CANCELLED, actor=actor, request_id=request_id)
+
+        schedule_order_archive(order)
+
         db.commit()
         db.refresh(order)
         return order
@@ -307,6 +321,9 @@ def integration_release_flow(db: Session, order_id: int):
             restock_for_order(db, order_id)
 
         transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=None)
+
+        schedule_order_archive(order)
+
         db.commit()
         return {"status": "CANCELLED"}
     except Exception:
