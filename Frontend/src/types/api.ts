@@ -53,6 +53,8 @@ export interface Order {
   customer_id: number;
   reference?: string | null;
   status: string;
+  archive_due_at?: string | null;
+  archived_at?: string | null;
   items: OrderItem[];
 }
 

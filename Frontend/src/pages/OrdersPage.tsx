@@ -57,9 +57,7 @@ function getStatusClasses(status?: string) {
 
 function getWorkflowStepClasses(current: boolean, completed: boolean) {
   if (current) return "border-orange-400 bg-orange-400/15 text-orange-300";
-  if (completed)
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-
+  if (completed) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
   return "border-rose-500/25 bg-rose-500/10 text-rose-300";
 }
 
@@ -85,17 +83,9 @@ function getPaginationItems(current: number, total: number) {
 
   const items: (number | string)[] = [1, 2];
 
-  if (current > 4) {
-    items.push("...");
-  }
-
-  if (current > 3 && current < total - 2) {
-    items.push(current);
-  }
-
-  if (current < total - 3) {
-    items.push("...");
-  }
+  if (current > 4) items.push("...");
+  if (current > 3 && current < total - 2) items.push(current);
+  if (current < total - 3) items.push("...");
 
   items.push(total - 1, total);
 
@@ -106,6 +96,7 @@ export default function OrdersPage() {
   const { user } = useAuth();
 
   const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
 
   const [orderIdInput, setOrderIdInput] = useState("");
@@ -129,9 +120,10 @@ export default function OrdersPage() {
     return workflowSteps.indexOf(selectedOrder.status.toUpperCase());
   }, [selectedOrder?.status]);
 
-  const availableActions = selectedOrder
-    ? actionsByStatus[selectedOrder.status?.toUpperCase()] ?? []
-    : [];
+  const availableActions =
+    selectedOrder && !selectedOrder.archived_at
+      ? actionsByStatus[selectedOrder.status?.toUpperCase()] ?? []
+      : [];
 
   const orderStats = useMemo(() => {
     const normalized = myOrders.map((order) => order.status?.toUpperCase());
@@ -173,11 +165,20 @@ export default function OrdersPage() {
         setLoadingMyOrders(true);
       }
 
-      const response = await http.get<Order[]>("/orders/my");
+      const response = await http.get<Order[]>("/orders/my", {
+        params: {
+          archived: showArchived,
+        },
+      });
+
       setMyOrders(response.data);
 
       if (!options?.silent) {
-        toast.success("Orders list refreshed.");
+        toast.success(
+          showArchived
+            ? "Archived orders refreshed."
+            : "Active orders refreshed."
+        );
       }
     } catch (err: unknown) {
       if (!options?.silent) {
@@ -223,7 +224,6 @@ export default function OrdersPage() {
       if (!options?.silent) {
         setFormError("Enter a valid order ID.");
       }
-
       return;
     }
 
@@ -262,6 +262,11 @@ export default function OrdersPage() {
       return;
     }
 
+    if (selectedOrder.archived_at) {
+      toast.error("Archived orders are read-only.");
+      return;
+    }
+
     try {
       setActionLoading(action);
       setFormError("");
@@ -297,7 +302,7 @@ export default function OrdersPage() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [showArchived]);
 
   return (
     <div className="space-y-6">
@@ -319,6 +324,7 @@ export default function OrdersPage() {
         >
           <div className="mb-5">
             <h2 className="text-2xl font-semibold text-white">Create order</h2>
+
             <p className="mt-1 text-sm text-slate-400">
               Choose products, set quantities, and submit a new order.
             </p>
@@ -326,6 +332,8 @@ export default function OrdersPage() {
 
           <CreateOrderForm
             onCreated={(id) => {
+              setShowArchived(false);
+              setOrdersPage(1);
               setOrderIdInput(String(id));
               fetchOrderById(id, { silent: true });
               fetchMyOrders({ silent: true });
@@ -402,6 +410,14 @@ export default function OrdersPage() {
                       <h3 className="mt-1 text-2xl font-bold text-white">
                         #{selectedOrder.id}
                       </h3>
+
+                      {selectedOrder.archived_at && (
+                        <div className="mt-3">
+                          <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                            Archived
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <span
@@ -434,6 +450,19 @@ export default function OrdersPage() {
                       </p>
                     </div>
                   </div>
+
+                  {selectedOrder.archive_due_at && !selectedOrder.archived_at && (
+                    <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-300">
+                      Archive scheduled at{" "}
+                      {formatDateTime(selectedOrder.archive_due_at)}.
+                    </div>
+                  )}
+
+                  {selectedOrder.archived_at && (
+                    <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-300">
+                      Archived at {formatDateTime(selectedOrder.archived_at)}.
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
@@ -475,7 +504,11 @@ export default function OrdersPage() {
                     Actions
                   </h4>
 
-                  {availableActions.length === 0 ? (
+                  {selectedOrder.archived_at ? (
+                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+                      Archived orders are read-only.
+                    </div>
+                  ) : availableActions.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
                       No available actions for this order status.
                     </div>
@@ -598,7 +631,10 @@ export default function OrdersPage() {
 
       <section className="grid gap-4 md:grid-cols-5">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Total orders</p>
+          <p className="text-sm text-slate-400">
+            {showArchived ? "Archived orders" : "Active orders"}
+          </p>
+
           <p className="mt-2 text-3xl font-bold text-white">
             {orderStats.total}
           </p>
@@ -606,6 +642,7 @@ export default function OrdersPage() {
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">New orders</p>
+
           <p className="mt-2 text-3xl font-bold text-cyan-300">
             {orderStats.newOrders}
           </p>
@@ -613,6 +650,7 @@ export default function OrdersPage() {
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">In progress</p>
+
           <p className="mt-2 text-3xl font-bold text-orange-300">
             {orderStats.inProgress}
           </p>
@@ -620,6 +658,7 @@ export default function OrdersPage() {
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">Shipped</p>
+
           <p className="mt-2 text-3xl font-bold text-emerald-300">
             {orderStats.shipped}
           </p>
@@ -627,6 +666,7 @@ export default function OrdersPage() {
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">Cancelled</p>
+
           <p className="mt-2 text-3xl font-bold text-rose-300">
             {orderStats.cancelled}
           </p>
@@ -634,28 +674,64 @@ export default function OrdersPage() {
       </section>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-white">My orders</h2>
 
             <p className="mt-1 text-sm text-slate-400">
-              Orders created by the currently authenticated user.
+              {showArchived
+                ? "Completed orders moved to the archive after the retention delay."
+                : "Active orders available for operational processing."}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => fetchMyOrders()}
-            disabled={loadingMyOrders}
-            className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loadingMyOrders ? "Refreshing..." : "Refresh list"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setShowArchived(false);
+                setOrdersPage(1);
+              }}
+              className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                !showArchived
+                  ? "bg-cyan-400 text-slate-950"
+                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
+              }`}
+            >
+              Active orders
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowArchived(true);
+                setOrdersPage(1);
+              }}
+              className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                showArchived
+                  ? "bg-cyan-400 text-slate-950"
+                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
+              }`}
+            >
+              Archived orders
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fetchMyOrders()}
+              disabled={loadingMyOrders}
+              className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingMyOrders ? "Refreshing..." : "Refresh list"}
+            </button>
+          </div>
         </div>
 
         {myOrders.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-            No orders created yet.
+            {showArchived
+              ? "No archived orders yet."
+              : "No active orders available."}
           </div>
         ) : (
           <>
@@ -682,13 +758,21 @@ export default function OrdersPage() {
                       </p>
                     </div>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(
-                        order.status
-                      )}`}
-                    >
-                      {prettyStatus(order.status)}
-                    </span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(
+                          order.status
+                        )}`}
+                      >
+                        {prettyStatus(order.status)}
+                      </span>
+
+                      {order.archived_at && (
+                        <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                          Archived
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-sm text-slate-400">
