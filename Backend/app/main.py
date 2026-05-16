@@ -1,26 +1,65 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from jose import jwt, JWTError
-
-
-from prometheus_fastapi_instrumentator import Instrumentator
-
-from app.core.config import settings
-from app.api.routes.auth import router as auth_router
-from app.api.routes.ops import ops_router
-from app.api.routes.orders import router as orders_router
-from app.api.routes.integrations import router as integrations_router
-from app.api.routes.users import router as users_router
-
+import asyncio
+import logging
 import time
 import uuid
-import logging
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from jose import JWTError, jwt
+from prometheus_fastapi_instrumentator import Instrumentator
 
-app = FastAPI(title=settings.app_name)
+from app.api.routes.auth import router as auth_router
+from app.api.routes.integrations import router as integrations_router
+from app.api.routes.ops import ops_router
+from app.api.routes.orders import router as orders_router
+from app.api.routes.users import router as users_router
+from app.core.config import settings
+from app.db.session import SessionLocal
+from app.services.archive_service import archive_due_orders
+
 logger = logging.getLogger("app")
+
+
+async def archive_orders_worker():
+    while True:
+        db = SessionLocal()
+
+        try:
+            archived = archive_due_orders(db)
+
+            if archived > 0:
+                logger.info(
+                    "orders_archived",
+                    extra={"archived_orders": archived},
+                )
+
+        except Exception:
+            logger.exception("archive_worker_failed")
+
+        finally:
+            db.close()
+
+        await asyncio.sleep(60)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(archive_orders_worker())
+
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    lifespan=lifespan,
+)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,41 +72,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
-    # Use upstream request id if provided; otherwise generate one
     rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-
-    # Make it available everywhere (endpoints + exception handlers)
     request.state.request_id = rid
 
-        # ---- ADMIN-ONLY GUARD for /metrics (Prometheus Instrumentator exposes it publicly) ----
     if request.url.path == "/metrics":
         auth = request.headers.get("Authorization", "")
+
         if not auth.startswith("Bearer "):
-            return JSONResponse(status_code=401, content={"detail": "Missing Bearer token", "request_id": rid})
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Missing Bearer token", "request_id": rid},
+            )
 
         token = auth.split(" ", 1)[1].strip()
+
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=[settings.jwt_algorithm],
+            )
         except JWTError:
-            return JSONResponse(status_code=401, content={"detail": "Invalid token", "request_id": rid})
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid token", "request_id": rid},
+            )
 
         role = payload.get("role")
+
         if role != "admin":
-            return JSONResponse(status_code=403, content={"detail": "Forbidden", "request_id": rid})
-    # -----------------------------------------------------------------------
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Forbidden", "request_id": rid},
+            )
 
     start = time.time()
+
     try:
         response = await call_next(request)
     except Exception:
-        logger.exception("unhandled_error", extra={"request_id": rid, "path": request.url.path})
+        logger.exception(
+            "unhandled_error",
+            extra={"request_id": rid, "path": request.url.path},
+        )
         raise
 
     duration_ms = int((time.time() - start) * 1000)
 
-    # Propagate back to client
     response.headers["X-Request-ID"] = rid
 
     logger.info(
@@ -80,11 +134,14 @@ async def request_id_middleware(request: Request, call_next):
             "duration_ms": duration_ms,
         },
     )
+
     return response
 
 
 def _rid(request: Request) -> str | None:
-    return getattr(request.state, "request_id", None) or request.headers.get("X-Request-ID")
+    return getattr(request.state, "request_id", None) or request.headers.get(
+        "X-Request-ID"
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -106,7 +163,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     rid = _rid(request)
-    logger.exception("unhandled_exception", extra={"request_id": rid, "path": request.url.path})
+
+    logger.exception(
+        "unhandled_exception",
+        extra={"request_id": rid, "path": request.url.path},
+    )
+
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error", "request_id": rid},

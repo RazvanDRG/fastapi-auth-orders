@@ -95,21 +95,40 @@ def list_products(db: Session = Depends(get_db)):
 
 @router.get("/my", response_model=list[OrderOut], summary="My orders")
 def my_orders(
+    archived: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    orders = (
+    query = (
         db.query(Order)
         .filter(Order.customer_id == current_user.id)
+    )
+
+    if archived:
+        query = query.filter(Order.archived_at.isnot(None))
+    else:
+        query = query.filter(Order.archived_at.is_(None))
+
+    orders = (
+        query
         .order_by(Order.id.desc())
         .all()
     )
 
     for order in orders:
-        items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        items = (
+            db.query(OrderItem)
+            .filter(OrderItem.order_id == order.id)
+            .all()
+        )
 
         for item in items:
-            product = db.query(Product).filter(Product.id == item.product_id).first()
+            product = (
+                db.query(Product)
+                .filter(Product.id == item.product_id)
+                .first()
+            )
+
             item.product_name = product.name if product else None
 
         order.items = items

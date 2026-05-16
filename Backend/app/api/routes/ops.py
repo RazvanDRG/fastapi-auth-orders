@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal, engine
 from app.models.order_event import OrderEvent
 from app.models.user_admin_event import UserAdminEvent
+from app.services.archive_service import archive_due_orders
 
 ops_router = APIRouter(prefix="/ops", tags=["Ops"])
 
@@ -96,6 +97,21 @@ def recent_activity(limit: int = 20):
         )
 
         return activities[:limit]
+
+    finally:
+        db.close()
+        
+@ops_router.post("/archive-orders", summary="Archive completed orders")
+def process_order_archive():
+    db: Session = SessionLocal()
+
+    try:
+        archived_count = archive_due_orders(db)
+
+        return {
+            "status": "ok",
+            "archived_orders": archived_count,
+        }
 
     finally:
         db.close()
