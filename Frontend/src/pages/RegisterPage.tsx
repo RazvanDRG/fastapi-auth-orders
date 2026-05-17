@@ -60,6 +60,8 @@ export function RegisterPage() {
   const { register } = useAuth();
 
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
@@ -93,12 +95,24 @@ export function RegisterPage() {
       return;
     }
 
+    if (!firstName.trim()) {
+      setFormError("First name is required.");
+      return;
+    }
+
+    if (!lastName.trim()) {
+      setFormError("Last name is required.");
+      return;
+    }
+
     try {
       setLoading(true);
 
       await register({
         email: email.trim(),
         password,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
       });
 
       toast.success("Account created successfully.");
@@ -161,6 +175,36 @@ export function RegisterPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      First name
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="given-name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="John"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Last name
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="family-name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Doe"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-200">
                     Email
