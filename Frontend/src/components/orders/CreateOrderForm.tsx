@@ -12,11 +12,15 @@ type CartItem = {
   qty: number;
 };
 
+type CreateOrderFormProps = {
+  onCreated: (id: number) => void;
+  refreshKey?: number;
+};
+
 export default function CreateOrderForm({
   onCreated,
-}: {
-  onCreated: (id: number) => void;
-}) {
+  refreshKey = 0,
+}: CreateOrderFormProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedQtyByProduct, setSelectedQtyByProduct] = useState<
@@ -71,8 +75,30 @@ export default function CreateOrderForm({
       );
 
       setSelectedQtyByProduct(initialQty);
+
+      setCart((prev) =>
+        prev
+          .map((item) => {
+            const freshProduct = response.data.find(
+              (product) => product.id === item.product_id
+            );
+
+            if (!freshProduct) return null;
+
+            return {
+              ...item,
+              name: freshProduct.name,
+              sku: freshProduct.sku,
+              stock_qty: freshProduct.stock_qty,
+              qty: Math.min(item.qty, Math.max(freshProduct.stock_qty, 1)),
+            };
+          })
+          .filter((item): item is CartItem => Boolean(item))
+      );
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to load products."));
+      toast.error(getErrorMessage(err, "Failed to load products."), {
+        id: "products-load-error",
+      });
     } finally {
       setLoadingProducts(false);
     }
@@ -80,7 +106,7 @@ export default function CreateOrderForm({
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [refreshKey]);
 
   function clampQty(qty: number, max: number) {
     if (!Number.isFinite(qty)) return 1;
@@ -327,9 +353,7 @@ export default function CreateOrderForm({
         <h3 className="text-lg font-semibold text-white">Order items</h3>
 
         {cart.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">
-            No products added yet.
-          </p>
+          <p className="mt-3 text-sm text-slate-400">No products added yet.</p>
         ) : (
           <div className="mt-4 space-y-3">
             {cart.map((item) => (

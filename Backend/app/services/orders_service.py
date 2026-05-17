@@ -108,7 +108,7 @@ def transition(
     allowed = {
         OrderStatus.NEW: {OrderStatus.RESERVED, OrderStatus.CANCELLED, OrderStatus.FAILED_RESERVATION},
         OrderStatus.RESERVED: {OrderStatus.PICKING, OrderStatus.CANCELLED},
-        OrderStatus.PICKING: {OrderStatus.PICKED},
+        OrderStatus.PICKING: {OrderStatus.PICKED, OrderStatus.CANCELLED},
         OrderStatus.PICKED: {OrderStatus.SHIPPED},
         OrderStatus.SHIPPED: set(),
         OrderStatus.CANCELLED: set(),
