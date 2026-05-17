@@ -98,6 +98,7 @@ export default function OrdersPage() {
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
+  const [productsRefreshKey, setProductsRefreshKey] = useState(0);
 
   const [orderIdInput, setOrderIdInput] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -276,6 +277,10 @@ export default function OrdersPage() {
       await fetchMyOrders({ silent: true });
       await fetchOrderEvents(selectedOrder.id, { silent: true });
 
+      if (["reserve", "retry-reserve", "cancel"].includes(action)) {
+        setProductsRefreshKey((prev) => prev + 1);
+      }
+
       toast.success(`Action "${action}" completed for order ${selectedOrder.id}.`);
     } catch (err: unknown) {
       toast.error(
@@ -331,6 +336,7 @@ export default function OrdersPage() {
           </div>
 
           <CreateOrderForm
+            refreshKey={productsRefreshKey}
             onCreated={(id) => {
               setShowArchived(false);
               setOrdersPage(1);

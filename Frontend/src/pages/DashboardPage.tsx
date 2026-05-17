@@ -335,7 +335,9 @@ export function DashboardPage() {
       setActivityFeed(activityResponse.data ?? []);
     } catch (err: unknown) {
       if (showLoader) {
-        toast.error(getErrorMessage(err, "Failed to load dashboard."));
+        toast.error(getErrorMessage(err, "Failed to load dashboard."), {
+          id: "dashboard-load-error",
+        });
       }
     } finally {
       setLoading(false);
@@ -361,7 +363,9 @@ export function DashboardPage() {
       setSearchedOrderId(parsedId);
       setSearchedOrderEvents(response.data ?? []);
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Failed to load order activity."));
+      toast.error(getErrorMessage(err, "Failed to load order activity."), {
+        id: "dashboard-activity-error",
+      });
     } finally {
       setLoadingOrderEvents(false);
     }
