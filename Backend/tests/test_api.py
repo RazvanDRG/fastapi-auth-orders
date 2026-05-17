@@ -39,10 +39,12 @@ def wait_api():
     raise RuntimeError("API not ready (ops/live not responding)")
 
 
-def register(email: str, password: str, first_name: str | None = None, last_name: str | None = None):
+def register(email: str, password: str, first_name: str = "Test", last_name: str = "User"):
     payload = {
         "email": email,
         "password": password,
+        "first_name": first_name,
+        "last_name": last_name,
     }
 
     if first_name is not None:

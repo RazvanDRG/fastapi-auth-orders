@@ -635,7 +635,7 @@ export default function OrdersPage() {
         </section>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-5">
+      <section className={`grid gap-4 ${showArchived ? "md:grid-cols-3" : "md:grid-cols-3"}`}>
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">
             {showArchived ? "Archived orders" : "Active orders"}
@@ -646,37 +646,43 @@ export default function OrdersPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">New orders</p>
+        {!showArchived ? (
+          <>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <p className="text-sm text-slate-400">New orders</p>
 
-          <p className="mt-2 text-3xl font-bold text-cyan-300">
-            {orderStats.newOrders}
-          </p>
-        </div>
+              <p className="mt-2 text-3xl font-bold text-cyan-300">
+                {orderStats.newOrders}
+              </p>
+            </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">In progress</p>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <p className="text-sm text-slate-400">In progress</p>
 
-          <p className="mt-2 text-3xl font-bold text-orange-300">
-            {orderStats.inProgress}
-          </p>
-        </div>
+              <p className="mt-2 text-3xl font-bold text-orange-300">
+                {orderStats.inProgress}
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <p className="text-sm text-slate-400">Shipped</p>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Shipped</p>
+              <p className="mt-2 text-3xl font-bold text-emerald-300">
+                {orderStats.shipped}
+              </p>
+            </div>
 
-          <p className="mt-2 text-3xl font-bold text-emerald-300">
-            {orderStats.shipped}
-          </p>
-        </div>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <p className="text-sm text-slate-400">Cancelled</p>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">Cancelled</p>
-
-          <p className="mt-2 text-3xl font-bold text-rose-300">
-            {orderStats.cancelled}
-          </p>
-        </div>
+              <p className="mt-2 text-3xl font-bold text-rose-300">
+                {orderStats.cancelled}
+              </p>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
