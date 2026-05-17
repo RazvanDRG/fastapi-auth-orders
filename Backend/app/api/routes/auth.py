@@ -16,6 +16,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     MessageResponse,
+    UpdateProfileRequest,
 )
 from app.services.auth import (
     hash_password,
@@ -142,6 +143,28 @@ def logout(payload: LogoutRequest, db: Session = Depends(get_db)):
 
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "role": current_user.role,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+    }
+    
+
+@router.patch("/me")
+def update_profile(
+    payload: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.first_name = payload.first_name.strip()
+    current_user.last_name = payload.last_name.strip()
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
     return {
         "id": current_user.id,
         "email": current_user.email,

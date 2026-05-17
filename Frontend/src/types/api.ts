@@ -33,7 +33,9 @@ export interface User {
   id: number;
   email: string;
   role: Role;
-  is_active: boolean;
+  first_name?: string | null;
+  last_name?: string | null;
+  is_active?: boolean;
   created_at?: string;
 }
 
