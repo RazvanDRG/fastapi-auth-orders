@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/utils";
+import { getRoleBadgeClasses } from "../lib/roles";
 
 type Role = "admin" | "operator" | "service";
 
@@ -233,7 +234,11 @@ export function AdminPage() {
                           </div>
 
                           <div className="flex flex-wrap gap-2">
-                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRoleBadgeClasses(
+                                user.role
+                              )}`}
+                            >
                               {user.role}
                             </span>
 

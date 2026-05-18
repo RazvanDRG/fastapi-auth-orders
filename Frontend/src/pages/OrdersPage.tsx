@@ -5,6 +5,7 @@ import CreateOrderForm from "../components/orders/CreateOrderForm";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import type { Order, OrderEvent } from "../types/api";
+import { getRoleBadgeClasses } from "../lib/roles";
 
 type OrderAction = {
   key: string;
@@ -608,7 +609,11 @@ export default function OrdersPage() {
                                   User ID #{event.actor_user_id ?? "-"}
                                 </span>
 
-                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-300">
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ${getRoleBadgeClasses(
+                                    event.actor_role
+                                  )}`}
+                                >
                                   {event.actor_role || "unknown"}
                                 </span>
 
@@ -635,7 +640,7 @@ export default function OrdersPage() {
         </section>
       </div>
 
-      <section className={`grid gap-4 ${showArchived ? "md:grid-cols-3" : "md:grid-cols-3"}`}>
+      <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
           <p className="text-sm text-slate-400">
             {showArchived ? "Archived orders" : "Active orders"}

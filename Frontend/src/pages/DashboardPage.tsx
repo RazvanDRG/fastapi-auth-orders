@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import type { ActivityFeedItem, Order, OrderEvent } from "../types/api";
+import { getRoleBadgeClasses } from "../lib/roles";
 
 type DashboardMetrics = {
   totalOrders: number;
@@ -108,19 +109,6 @@ function getActivityAccent(description: string) {
     dot: "bg-violet-400 shadow-violet-500/40",
     badge: "border-violet-500/20 bg-violet-500/10 text-violet-300",
   };
-}
-
-function getRoleBadge(role?: string | null) {
-  switch ((role || "").toLowerCase()) {
-    case "admin":
-      return "border-rose-500/20 bg-rose-500/10 text-rose-300";
-    case "operator":
-      return "border-cyan-500/20 bg-cyan-500/10 text-cyan-300";
-    case "service":
-      return "border-emerald-500/20 bg-emerald-500/10 text-emerald-300";
-    default:
-      return "border-slate-700 bg-slate-900 text-slate-300";
-  }
 }
 
 function getActorLabel(role?: string | null, id?: number | null) {
@@ -606,7 +594,7 @@ export function DashboardPage() {
                       event.from_status ?? "-"
                     } → ${event.to_status ?? "-"})`;
                     const accent = getActivityAccent(description);
-                    const roleBadge = getRoleBadge(event.actor_role);
+                    const roleBadge = getRoleBadgeClasses(event.actor_role);
 
                     return (
                       <div
@@ -675,7 +663,7 @@ export function DashboardPage() {
               paginatedActivityFeed.map((activity, index) => {
                 const accent = getActivityAccent(activity.description);
                 const targetStatus = getTargetStatus(activity.description);
-                const roleBadge = getRoleBadge(activity.actor_role);
+                const roleBadge = getRoleBadgeClasses(activity.actor_role);
 
                 return (
                   <div

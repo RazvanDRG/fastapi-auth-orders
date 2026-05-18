@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../../context/AuthContext";
+import { getRoleBadgeClasses } from "../../lib/roles";
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -82,7 +83,11 @@ export function AppShell() {
                 {user?.email || "No email"}
               </p>
 
-              <div className="mt-3 inline-flex rounded-full bg-cyan-400/15 px-3 py-1 text-xs font-semibold text-cyan-300">
+              <div
+                className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRoleBadgeClasses(
+                  user?.role
+                )}`}
+              >
                 {user?.role || "operator"}
               </div>
             </div>

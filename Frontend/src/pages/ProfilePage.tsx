@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
+import { getRoleBadgeClasses } from "../lib/roles";
 
 export function ProfilePage() {
   const { user, refreshProfile } = useAuth();
@@ -159,7 +160,11 @@ export function ProfilePage() {
                   Role
                 </p>
 
-                <span className="mt-3 inline-flex rounded-full bg-cyan-500/15 px-3 py-1 text-sm font-semibold text-cyan-300">
+                <span
+                  className={`mt-3 inline-flex rounded-full px-3 py-1 text-sm font-semibold uppercase tracking-wide ${getRoleBadgeClasses(
+                    user?.role
+                  )}`}
+                >
                   {user?.role ?? "-"}
                 </span>
               </div>
