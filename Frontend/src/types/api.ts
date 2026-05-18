@@ -98,3 +98,6 @@ export interface OrderEvent {
   request_id: string | null;
   created_at: string;
 }
+
+export type AuthTokens = AuthResponse;
+export type TokenResponse = AuthResponse;
