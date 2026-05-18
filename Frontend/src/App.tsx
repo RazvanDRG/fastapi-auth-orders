@@ -1,17 +1,17 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { ProtectedRoute } from './components/layout/ProtectedRoute';
-import { AppShell } from './components/layout/AppShell';
-import { DashboardPage } from './pages/DashboardPage';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { AppShell } from "./components/layout/AppShell";
+import { DashboardPage } from "./pages/DashboardPage";
+import { LoginPage } from "./pages/LoginPage";
+import { RegisterPage } from "./pages/RegisterPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import OrdersPage from "./pages/OrdersPage";
-import { IntegrationsPage } from './pages/IntegrationsPage';
-import { AdminPage } from './pages/AdminPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { MetricsPage } from './pages/MetricsPage';
-import { NotFoundPage } from './pages/NotFoundPage';
+import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { AdminPage } from "./pages/AdminPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { MetricsPage } from "./pages/MetricsPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 
 export function App() {
   return (
@@ -33,6 +33,7 @@ export function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
+
         <Route
           path="/integrations"
           element={
@@ -41,6 +42,7 @@ export function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/admin"
           element={
