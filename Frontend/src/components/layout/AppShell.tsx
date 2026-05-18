@@ -1,15 +1,32 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Package, User, LogOut } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+import {
+  LayoutDashboard,
+  Package,
+  User,
+  LogOut,
+  Shield,
+} from "lucide-react";
 
-const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/orders", label: "Orders", icon: Package },
-  { to: "/profile", label: "Profile", icon: User },
-];
+import { useAuth } from "../../context/AuthContext";
 
 export function AppShell() {
   const { user, logout } = useAuth();
+
+  const navItems = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/orders", label: "Orders", icon: Package },
+    { to: "/profile", label: "Profile", icon: User },
+
+    ...(user?.role === "admin"
+      ? [
+          {
+            to: "/admin",
+            label: "Admin",
+            icon: Shield,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -21,8 +38,13 @@ export function AppShell() {
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold text-white">Warehouse Ops</h1>
-              <p className="text-sm text-slate-400">Interview Console</p>
+              <h1 className="text-2xl font-bold text-white">
+                Warehouse Ops
+              </h1>
+
+              <p className="text-sm text-slate-400">
+                Interview Console
+              </p>
             </div>
           </div>
 
@@ -43,6 +65,7 @@ export function AppShell() {
                   }
                 >
                   <Icon size={18} />
+
                   <span>{item.label}</span>
                 </NavLink>
               );
@@ -70,7 +93,8 @@ export function AppShell() {
               className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-rose-400/40 hover:text-rose-300"
             >
               <LogOut size={16} />
-              Sign out
+
+              <span>Sign out</span>
             </button>
           </div>
 

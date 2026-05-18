@@ -1,7 +1,8 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.rbac import require_roles
@@ -18,8 +19,63 @@ router = APIRouter(
 )
 
 
+class UserOut(BaseModel):
+    id: int
+    email: EmailStr
+    role: Literal["admin", "operator", "service"]
+    first_name: str | None = None
+    last_name: str | None = None
+    is_deleted: bool
+
+    class Config:
+        from_attributes = True
+
+
 class UpdateUserRoleRequest(BaseModel):
     role: Literal["admin", "operator", "service"]
+
+
+class UpdateUserProfileRequest(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+
+
+@router.get("", response_model=list[UserOut], summary="List users")
+def list_users(
+    db: Session = Depends(get_db),
+):
+    return (
+        db.execute(
+            select(User)
+            .order_by(User.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+@router.patch("/{user_id}/profile", response_model=UserOut, summary="Update user profile")
+def update_user_profile_route(
+    user_id: int,
+    payload: UpdateUserProfileRequest,
+    db: Session = Depends(get_db),
+):
+    user = db.scalar(select(User).where(User.id == user_id))
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.is_deleted:
+        raise HTTPException(status_code=409, detail="Cannot update a deleted user")
+
+    user.first_name = payload.first_name.strip()
+    user.last_name = payload.last_name.strip()
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
 
 
 @router.delete("/{user_id}", summary="Soft delete user")
