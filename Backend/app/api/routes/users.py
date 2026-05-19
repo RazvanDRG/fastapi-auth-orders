@@ -36,6 +36,7 @@ class UpdateUserRoleRequest(BaseModel):
 
 
 class UpdateUserProfileRequest(BaseModel):
+    email: EmailStr
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
 
@@ -68,6 +69,17 @@ def update_user_profile_route(
     if user.is_deleted:
         raise HTTPException(status_code=409, detail="Cannot update a deleted user")
 
+    existing = db.scalar(
+        select(User).where(
+            User.email == payload.email,
+            User.id != user_id,
+        )
+    )
+
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already exists")
+
+    user.email = payload.email.strip().lower()
     user.first_name = payload.first_name.strip()
     user.last_name = payload.last_name.strip()
 
