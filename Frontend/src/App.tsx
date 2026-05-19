@@ -32,7 +32,14 @@ export function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/orders" element={<OrdersPage />} />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "operator"]}>
+              <OrdersPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/metrics" element={<MetricsPage />} />
 
         <Route

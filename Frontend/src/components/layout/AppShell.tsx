@@ -16,7 +16,9 @@ export function AppShell() {
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/orders", label: "Orders", icon: Package },
+    ...(user?.role !== "service"
+      ? [{ to: "/orders", label: "Orders", icon: Package }]
+      : []),
     { to: "/profile", label: "Profile", icon: User },
 
     ...(user?.role === "admin"

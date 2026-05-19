@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.archive_service import archive_due_orders
 from app.api.routes.products import router as products_router
+from app.api.routes.metrics import router as metrics_router
 
 logger = logging.getLogger("app")
 
@@ -79,7 +80,7 @@ async def request_id_middleware(request: Request, call_next):
     rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = rid
 
-    if request.url.path == "/metrics":
+    if request.url.path == "/metrics" and request.method != "OPTIONS":
         auth = request.headers.get("Authorization", "")
 
         if not auth.startswith("Bearer "):
@@ -176,11 +177,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-Instrumentator().instrument(app).expose(
-    app,
-    endpoint="/metrics",
-    include_in_schema=False,
-)
+Instrumentator().instrument(app)
 
 app.include_router(ops_router)
 app.include_router(auth_router)
@@ -188,3 +185,4 @@ app.include_router(orders_router)
 app.include_router(integrations_router)
 app.include_router(users_router)
 app.include_router(products_router)
+app.include_router(metrics_router)
