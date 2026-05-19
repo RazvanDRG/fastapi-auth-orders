@@ -19,6 +19,7 @@ from app.api.routes.users import router as users_router
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.archive_service import archive_due_orders
+from app.api.routes.products import router as products_router
 
 logger = logging.getLogger("app")
 
@@ -186,3 +187,4 @@ app.include_router(auth_router)
 app.include_router(orders_router)
 app.include_router(integrations_router)
 app.include_router(users_router)
+app.include_router(products_router)
