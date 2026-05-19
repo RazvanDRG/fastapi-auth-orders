@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
+  Boxes,
   User,
   LogOut,
   Shield,
@@ -24,6 +25,16 @@ export function AppShell() {
             to: "/admin",
             label: "Admin",
             icon: Shield,
+          },
+        ]
+      : []),
+
+    ...(user?.role === "admin" || user?.role === "service"
+      ? [
+          {
+            to: "/inventory",
+            label: "Inventory",
+            icon: Boxes,
           },
         ]
       : []),

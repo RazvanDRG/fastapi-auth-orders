@@ -9,6 +9,7 @@ import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import OrdersPage from "./pages/OrdersPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AdminPage } from "./pages/AdminPage";
+import { InventoryPage } from "./pages/InventoryPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { MetricsPage } from "./pages/MetricsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -48,6 +49,15 @@ export function App() {
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/inventory"
+          element={
+            <ProtectedRoute allowedRoles={["admin", "service"]}>
+              <InventoryPage />
             </ProtectedRoute>
           }
         />
