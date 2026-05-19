@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
+
+import { useAuth } from "../context/AuthContext";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
-import type { ActivityFeedItem, Order, OrderEvent } from "../types/api";
 import { getRoleBadgeClasses } from "../lib/roles";
+import type { ActivityFeedItem, Order, OrderEvent } from "../types/api";
 
 type DashboardMetrics = {
   totalOrders: number;
@@ -13,6 +15,13 @@ type DashboardMetrics = {
   inProgressOrders: number;
   shippedOrders: number;
   cancelledOrders: number;
+};
+
+type Product = {
+  id: number;
+  sku: string;
+  name: string;
+  stock_qty: number;
 };
 
 type PaginationItem = number | "ellipsis";
@@ -171,6 +180,7 @@ function getPaginationItems(
 
 export function DashboardPage() {
   const location = useLocation();
+  const { user } = useAuth();
 
   const [metrics, setMetrics] = useState<DashboardMetrics>(initialMetrics);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedItem[]>([]);
@@ -184,6 +194,8 @@ export function DashboardPage() {
   const [searchedOrderEvents, setSearchedOrderEvents] = useState<OrderEvent[]>(
     []
   );
+
+  const [inventoryProducts, setInventoryProducts] = useState<Product[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -210,6 +222,18 @@ export function DashboardPage() {
   }, [location.state]);
 
   useEffect(() => {
+    if (!user?.role) return;
+
+    if (user.role === "service") {
+      fetchInventoryMetrics(true);
+
+      const interval = setInterval(() => {
+        fetchInventoryMetrics(false);
+      }, 15000);
+
+      return () => clearInterval(interval);
+    }
+
     loadDashboard(true);
 
     const interval = setInterval(() => {
@@ -217,7 +241,7 @@ export function DashboardPage() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
     setActivityPage(1);
@@ -333,6 +357,28 @@ export function DashboardPage() {
     }
   }
 
+  async function fetchInventoryMetrics(showLoader = false) {
+    try {
+      if (showLoader) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
+      const { data } = await http.get<Product[]>("/products");
+      setInventoryProducts(data ?? []);
+    } catch (err: unknown) {
+      if (showLoader) {
+        toast.error(getErrorMessage(err, "Failed to load inventory dashboard."), {
+          id: "inventory-dashboard-load-error",
+        });
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
   async function searchOrderEvents() {
     const parsedId = Number(orderLookupInput);
 
@@ -402,6 +448,30 @@ export function DashboardPage() {
     [metrics]
   );
 
+  const totalProducts = inventoryProducts.length;
+
+  const healthyProducts = inventoryProducts.filter(
+    (product) => product.stock_qty > 10
+  ).length;
+
+  const lowStockProducts = inventoryProducts.filter(
+    (product) => product.stock_qty > 0 && product.stock_qty <= 10
+  ).length;
+
+  const outOfStockProducts = inventoryProducts.filter(
+    (product) => product.stock_qty <= 0
+  ).length;
+
+  const lowStockList = inventoryProducts
+    .filter((product) => product.stock_qty > 0 && product.stock_qty <= 10)
+    .sort((a, b) => a.stock_qty - b.stock_qty)
+    .slice(0, 5);
+
+  const outOfStockList = inventoryProducts
+    .filter((product) => product.stock_qty <= 0)
+    .sort((a, b) => a.id - b.id)
+    .slice(0, 5);
+
   const filtersActive = Boolean(
     activitySearch.trim() || statusFilter !== "ALL" || roleFilter !== "ALL"
   );
@@ -415,6 +485,217 @@ export function DashboardPage() {
     activityPage * ACTIVITY_PAGE_SIZE,
     filteredActivityFeed.length
   );
+
+  if (user?.role === "service") {
+    return (
+      <div className="space-y-8">
+        <section className="rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8 shadow-2xl shadow-black/20">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-300">
+                Inventory Operations Dashboard
+              </p>
+
+              <h1 className="mt-4 text-4xl font-black tracking-tight text-white">
+                Stock readiness overview
+              </h1>
+
+              <p className="mt-4 text-sm leading-7 text-slate-400">
+                Monitor product availability, low-stock risks, and warehouse
+                inventory readiness for order processing.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                to="/inventory"
+                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20"
+              >
+                Open Inventory Workspace
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => fetchInventoryMetrics(false)}
+                className="rounded-2xl border border-slate-700 bg-slate-900/70 px-5 py-4 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+              >
+                {refreshing ? "Refreshing..." : "Refresh Dashboard"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+            <p className="text-sm font-medium text-slate-400">
+              Total products
+            </p>
+
+            <div className="mt-4 flex items-end justify-between">
+              <span className="text-4xl font-black text-white">
+                {loading ? "--" : totalProducts}
+              </span>
+
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Catalog
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-6">
+            <p className="text-sm font-medium text-slate-400">
+              Healthy stock
+            </p>
+
+            <div className="mt-4 flex items-end justify-between">
+              <span className="text-4xl font-black text-emerald-300">
+                {loading ? "--" : healthyProducts}
+              </span>
+
+              <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                &gt; 10
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-amber-500/20 bg-amber-500/5 p-6">
+            <p className="text-sm font-medium text-slate-400">Low stock</p>
+
+            <div className="mt-4 flex items-end justify-between">
+              <span className="text-4xl font-black text-amber-300">
+                {loading ? "--" : lowStockProducts}
+              </span>
+
+              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                1-10
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-rose-500/20 bg-rose-500/5 p-6">
+            <p className="text-sm font-medium text-slate-400">Out of stock</p>
+
+            <div className="mt-4 flex items-end justify-between">
+              <span className="text-4xl font-black text-rose-300">
+                {loading ? "--" : outOfStockProducts}
+              </span>
+
+              <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-300">
+                0
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+            <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">
+                  Low stock products
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Products that require inventory attention soon.
+                </p>
+              </div>
+
+              <Link
+                to="/inventory"
+                className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+              >
+                Manage stock
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              {lowStockList.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
+                  No low-stock products right now.
+                </div>
+              ) : (
+                lowStockList.map((product) => (
+                  <div
+                    key={product.id}
+                    className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4 transition hover:border-amber-500/30"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-white">
+                          {product.name}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-400">
+                          SKU: {product.sku}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                        {product.stock_qty} left
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+              <h2 className="text-xl font-bold text-white">
+                Inventory workflow
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Service users maintain product readiness and stock levels.
+                Order processing remains separated for operator users.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {["CATALOG", "STOCK", "LOW STOCK", "RESTOCK"].map((status) => (
+                  <span
+                    key={status}
+                    className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold tracking-wide text-cyan-300"
+                  >
+                    {status}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+              <h2 className="text-xl font-bold text-white">
+                Out of stock
+              </h2>
+
+              <div className="mt-5 space-y-3">
+                {outOfStockList.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-sm text-slate-400">
+                    No out-of-stock products.
+                  </div>
+                ) : (
+                  outOfStockList.map((product) => (
+                    <div
+                      key={product.id}
+                      className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4"
+                    >
+                      <p className="font-semibold text-white">
+                        {product.name}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-400">
+                        SKU: {product.sku}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -627,7 +908,7 @@ export function DashboardPage() {
 
                                 {event.actor_role && (
                                   <span
-                                    className={`rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide ${roleBadge}`}
+                                    className={`rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ${roleBadge}`}
                                   >
                                     {event.actor_role}
                                   </span>
@@ -703,7 +984,7 @@ export function DashboardPage() {
 
                             {activity.actor_role && (
                               <span
-                                className={`rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide ${roleBadge}`}
+                                className={`rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ${roleBadge}`}
                               >
                                 {activity.actor_role}
                               </span>
