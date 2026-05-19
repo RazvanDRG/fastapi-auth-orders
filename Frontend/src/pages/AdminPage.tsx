@@ -40,6 +40,7 @@ export function AdminPage() {
   const [savingUserId, setSavingUserId] = useState<number | null>(null);
   const [usersPage, setUsersPage] = useState(1);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [userPendingDelete, setUserPendingDelete] = useState<UserItem | null>(null);
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => a.id - b.id);
@@ -115,11 +116,6 @@ export function AdminPage() {
   }
 
   async function deleteUser(userId: number) {
-    const confirmed = window.confirm(
-      "Are you sure you want to soft delete this user?"
-    );
-
-    if (!confirmed) return;
 
     try {
       setSavingUserId(userId);
@@ -331,10 +327,8 @@ export function AdminPage() {
                             <button
                               type="button"
                               disabled={savingUserId === user.id || user.is_deleted}
-                              onClick={async () => {
-                                await deleteUser(user.id);
-                                setEditingUserId(null);
-                              }}
+                              onClick={() => setUserPendingDelete(user)}
+
                               className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {user.is_deleted ? "Deleted" : "Soft delete user"}
@@ -422,6 +416,68 @@ export function AdminPage() {
           </>
         )}
       </section>
+
+      {userPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+            <div>
+              <h3 className="text-2xl font-semibold text-white">
+                Confirm soft delete
+              </h3>
+
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                This user will be deactivated and hidden from active operations.
+                The account data will remain stored for audit and recovery purposes.
+              </p>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+              <p className="text-sm font-semibold text-white">
+                {[
+                  userPendingDelete.first_name,
+                  userPendingDelete.last_name,
+                ]
+                  .filter(Boolean)
+                  .join(" ") || "Unnamed user"}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-400">
+                {userPendingDelete.email}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-500">
+                User ID #{userPendingDelete.id}
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setUserPendingDelete(null)}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={savingUserId === userPendingDelete.id}
+                onClick={async () => {
+                  await deleteUser(userPendingDelete.id);
+
+                  setUserPendingDelete(null);
+                  setEditingUserId(null);
+                }}
+                className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingUserId === userPendingDelete.id
+                  ? "Deleting..."
+                  : "Soft delete user"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
