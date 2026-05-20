@@ -202,6 +202,66 @@ const filteredInventoryEvents = inventoryEvents.filter((event) => {
   }
 }
 
+function exportInventoryHistoryCsv() {
+  const headers = [
+    "event_id",
+    "user_id",
+    "user_name",
+    "product_id",
+    "sku",
+    "delta",
+    "old_stock",
+    "new_stock",
+    "created_at",
+  ];
+
+  const escapeCsv = (value: string | number | null | undefined) => {
+    const text = String(value ?? "");
+    return `"${text.replace(/:/g, "-")}"`;
+  };
+
+  const rows = filteredInventoryEvents.map((event) => {
+    const actorName =
+      [event.first_name, event.last_name].filter(Boolean).join(" ") ||
+      "Unknown user";
+
+    return [
+      event.id,
+      event.user_id,
+      actorName,
+      event.product_id,
+      event.sku,
+      event.delta,
+      event.old_stock,
+      event.new_stock,
+      new Date(event.created_at).toLocaleString(),
+    ].map(escapeCsv);
+  });
+
+  const csv = [headers.map(escapeCsv), ...rows]
+    .map((row) => row.join(","))
+    .join("\n");
+
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `inventory-history-${new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replace(/:/g, "-")}.csv`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
   return (
     <div className="space-y-6">
       <div>
@@ -560,6 +620,14 @@ const filteredInventoryEvents = inventoryEvents.filter((event) => {
                 />
               </svg>
             </div>
+            <button
+              type="button"
+              onClick={exportInventoryHistoryCsv}
+              disabled={filteredInventoryEvents.length === 0}
+              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              CSV report
+            </button>
 
             <button
               type="button"
