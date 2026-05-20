@@ -1,12 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
+from app.core.roles import Roles
 from app.core.config import settings
 from app.db.session import SessionLocal, engine
+
 from app.models.order_event import OrderEvent
+from app.models.user import User
 from app.models.user_admin_event import UserAdminEvent
+
 from app.services.archive_service import archive_due_orders
+
 
 ops_router = APIRouter(prefix="/ops", tags=["Ops"])
 
@@ -27,8 +33,20 @@ def ready():
 
 
 @ops_router.get("/activity", summary="Recent activity feed")
-def recent_activity(limit: int = 20):
+def recent_activity(
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+):
     db: Session = SessionLocal()
+
+    if current_user.role not in [
+        Roles.ADMIN,
+        Roles.OPERATOR,
+    ]:
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions",
+        )
 
     try:
         order_events = (

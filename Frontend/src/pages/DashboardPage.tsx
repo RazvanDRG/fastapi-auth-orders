@@ -506,7 +506,7 @@ export function DashboardPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 to="/inventory"
                 className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20"
@@ -716,20 +716,30 @@ export function DashboardPage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               to="/orders"
-              className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20"
+              className="flex h-14 w-full min-w-[260px] items-center justify-center whitespace-nowrap rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-6 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20 sm:w-64"
             >
               Open Orders Workspace
             </Link>
 
-            <Link
-              to="/metrics"
-              className="rounded-2xl border border-slate-700 bg-slate-900/70 px-5 py-4 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
-            >
-              View System Metrics
-            </Link>
+            {user?.role === "admin" ? (
+              <Link
+                to="/metrics"
+                className="flex h-14 w-full items-center justify-center whitespace-nowrap rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20 sm:w-56"
+              >
+                View System Metrics
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => loadDashboard(false)}
+                className="flex h-14 w-full items-center justify-center whitespace-nowrap rounded-2xl border border-slate-700 bg-slate-900/70 px-5 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200 sm:w-56"
+              >
+                {refreshing ? "Refreshing..." : "Refresh Dashboard"}
+              </button>
+            )}
           </div>
         </div>
       </section>
