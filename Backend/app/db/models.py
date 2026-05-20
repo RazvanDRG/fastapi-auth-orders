@@ -6,3 +6,4 @@ from app.models.refresh_token import RefreshToken
 from app.models.order_event import OrderEvent
 from app.models.password_reset_code import PasswordResetCode
 from app.models.user_admin_event import UserAdminEvent
+from app.models.inventory_event import InventoryEvent
