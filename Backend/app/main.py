@@ -49,10 +49,14 @@ async def archive_orders_worker():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from alembic.config import Config
-    from alembic import command
-    alembic_cfg = Config("/app/alembic.ini")
-    command.upgrade(alembic_cfg, "head")
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config("/app/alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("alembic_migrations_complete")
+    except Exception:
+        logger.exception("alembic_migrations_failed")
 
     task = asyncio.create_task(archive_orders_worker())
     try:
