@@ -110,6 +110,9 @@ export default function OrdersPage() {
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
+  const [ordersSearch, setOrdersSearch] = useState("");
+  const [ordersStartDate, setOrdersStartDate] = useState("");
+  const [ordersEndDate, setOrdersEndDate] = useState("");
 
   const selectedOrderIdRef = useRef<number | null>(null);
 
@@ -141,9 +144,55 @@ export default function OrdersPage() {
     };
   }, [myOrders]);
 
+  const filteredOrders = useMemo(() => {
+    const query = ordersSearch.trim().toLowerCase();
+
+    return myOrders.filter((order) => {
+      const searchableText = [
+        order.id,
+        order.reference,
+        order.status,
+        order.customer_id,
+        ...(order.items ?? []).flatMap((item) => [
+          item.product_id,
+          item.product_name,
+          item.qty,
+        ]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !query || searchableText.includes(query);
+
+      const orderDate = showArchived
+        ? order.archived_at ?? order.last_activity_at ?? null
+        : order.last_activity_at ?? null;
+
+
+      const orderTime = orderDate ? new Date(orderDate).getTime() : null;
+
+      const startTime = ordersStartDate
+        ? new Date(ordersStartDate).getTime()
+        : null;
+
+      const endTime = ordersEndDate
+        ? new Date(ordersEndDate).getTime()
+        : null;
+
+      const matchesStart =
+        !startTime || orderTime === null || orderTime >= startTime;
+
+      const matchesEnd =
+        !endTime || orderTime === null || orderTime <= endTime;
+
+      return matchesSearch && matchesStart && matchesEnd;
+    });
+  }, [myOrders, ordersSearch, ordersStartDate, ordersEndDate]);
+
   const sortedOrders = useMemo(() => {
-    return [...myOrders].sort((a, b) => b.id - a.id);
-  }, [myOrders]);
+    return [...filteredOrders].sort((a, b) => b.id - a.id);
+  }, [filteredOrders]);
 
   const totalOrderPages = Math.max(
     1,
@@ -309,6 +358,67 @@ export default function OrdersPage() {
 
     return () => clearInterval(interval);
   }, [showArchived]);
+
+  function exportOrdersCsv() {
+    const headers = [
+      "order_id",
+      "status",
+      "reference",
+      "customer_id",
+      "last_activity_at",
+      "archived_at",
+      "items",
+    ];
+
+    const escapeCsv = (value: string | number | null | undefined) => {
+      const text = String(value ?? "");
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+
+    const rows = sortedOrders.map((order) => {
+      const items = (order.items ?? [])
+        .map((item) => {
+          const productName = item.product_name ?? `Product ${item.product_id}`;
+          return `${productName} ID:${item.product_id} Qty:${item.qty}`;
+        })
+        .join(" | ");
+
+      return [
+        order.id,
+        order.status,
+        order.reference ?? "-",
+        order.customer_id,
+        order.last_activity_at
+          ? new Date(order.last_activity_at).toLocaleString()
+          : "",
+        order.archived_at ? new Date(order.archived_at).toLocaleString() : "",
+        items,
+      ].map(escapeCsv);
+    });
+
+    const csv = [headers.map(escapeCsv), ...rows]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${showArchived ? "archived" : "active"}-orders-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/:/g, "-")}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="space-y-6">
@@ -691,60 +801,128 @@ export default function OrdersPage() {
       </section>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-white">My orders</h2>
+        <div className="mb-6 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">My orders</h2>
 
-            <p className="mt-1 text-sm text-slate-400">
-              {showArchived
-                ? "Completed orders moved to the archive after the retention delay."
-                : "Active orders available for operational processing."}
-            </p>
+              <p className="mt-1 text-sm text-slate-400">
+                {showArchived
+                  ? "Completed orders moved to the archive after the retention delay."
+                  : "Active orders available for operational processing."}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowArchived(false);
+                  setOrdersPage(1);
+                  setOrdersSearch("");
+                  setOrdersStartDate("");
+                  setOrdersEndDate("");
+                }}
+                className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                  !showArchived
+                    ? "bg-cyan-400 text-slate-950"
+                    : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
+                }`}
+              >
+                Active orders
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowArchived(true);
+                  setOrdersPage(1);
+                  setOrdersSearch("");
+                  setOrdersStartDate("");
+                  setOrdersEndDate("");
+                }}
+                className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                  showArchived
+                    ? "bg-cyan-400 text-slate-950"
+                    : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
+                }`}
+              >
+                Archived orders
+              </button>
+
+              <span className="rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                {filteredOrders.length} orders
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setShowArchived(false);
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <input
+              value={ordersSearch}
+              onChange={(e) => {
+                setOrdersSearch(e.target.value);
                 setOrdersPage(1);
               }}
-              className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
-                !showArchived
-                  ? "bg-cyan-400 text-slate-950"
-                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
-              }`}
-            >
-              Active orders
-            </button>
+              placeholder="Search by order ID, status, product, reference"
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 xl:w-96"
+            />
+
+            <input
+              type="datetime-local"
+              value={ordersStartDate}
+              onChange={(e) => {
+                setOrdersStartDate(e.target.value);
+                setOrdersPage(1);
+              }}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+            />
+
+            <input
+              type="datetime-local"
+              value={ordersEndDate}
+              onChange={(e) => {
+                setOrdersEndDate(e.target.value);
+                setOrdersPage(1);
+              }}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+            />
 
             <button
               type="button"
-              onClick={() => {
-                setShowArchived(true);
-                setOrdersPage(1);
-              }}
-              className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
-                showArchived
-                  ? "bg-cyan-400 text-slate-950"
-                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
-              }`}
+              onClick={exportOrdersCsv}
+              disabled={sortedOrders.length === 0}
+              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Archived orders
+              CSV report
             </button>
-
+            
             <button
               type="button"
               onClick={() => fetchMyOrders()}
               disabled={loadingMyOrders}
-              className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loadingMyOrders ? "Refreshing..." : "Refresh list"}
+              {loadingMyOrders ? "Refreshing..." : "Refresh"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOrdersSearch("");
+                setOrdersStartDate("");
+                setOrdersEndDate("");
+                setOrdersPage(1);
+              }}
+              className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-rose-500/40 hover:text-rose-300"
+            >
+              Clear
             </button>
           </div>
         </div>
 
-        {myOrders.length === 0 ? (
+        {filteredOrders.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
             {showArchived
               ? "No archived orders yet."
@@ -835,6 +1013,17 @@ export default function OrdersPage() {
                         No items returned.
                       </p>
                     )}
+                  </div>
+                  <div className="mt-5 border-t border-slate-800 pt-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">
+                      Last activity
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-slate-300">
+                      {order.last_activity_at
+                        ? new Date(order.last_activity_at).toLocaleString()
+                        : "No activity"}
+                    </p>
                   </div>
                 </button>
               ))}

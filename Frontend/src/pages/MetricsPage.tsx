@@ -60,8 +60,10 @@ export function MetricsPage() {
       </section>
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm font-semibold text-rose-300">
-          {error}
+        <div className="rounded-3xl border border-rose-500/40 bg-rose-950/30 px-5 py-4 text-sm font-medium text-rose-200">
+          {error.includes("403")
+            ? "Access denied. Metrics are available only for administrator accounts."
+            : error}
         </div>
       )}
 

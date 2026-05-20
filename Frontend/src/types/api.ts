@@ -60,6 +60,7 @@ export interface Order {
   archive_due_at?: string | null;
   archived_at?: string | null;
   items: OrderItem[];
+  last_activity_at?: string | null;
 }
 
 export interface CreateOrderRequest {

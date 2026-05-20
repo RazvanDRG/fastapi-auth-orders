@@ -38,6 +38,7 @@ class OrderOut(BaseModel):
     reference: Optional[str]
     status: OrderStatus
     items: list[OrderItemOut] = []
+    last_activity_at: datetime | None = None
 
     class Config:
         from_attributes = True
