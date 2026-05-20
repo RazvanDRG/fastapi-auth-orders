@@ -45,6 +45,8 @@ export function InventoryPage() {
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [stockDeltaByProduct, setStockDeltaByProduct] = useState<Record<number, number>>({});
   const [inventoryEvents, setInventoryEvents] = useState<InventoryEvent[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historySearch, setHistorySearch] = useState("");
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -158,6 +160,24 @@ export function InventoryPage() {
       prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
     );
   }
+
+  const filteredInventoryEvents = inventoryEvents.filter((event) => {
+  const query = historySearch.trim().toLowerCase();
+
+  if (!query) return true;
+
+  const actorName = [event.first_name, event.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    actorName.includes(query) ||
+    event.sku.toLowerCase().includes(query) ||
+    String(event.user_id).includes(query) ||
+    String(event.product_id).includes(query)
+  );
+});
 
   async function fetchInventoryHistory() {
   try {
@@ -443,58 +463,144 @@ export function InventoryPage() {
         )}
       </section>
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5">
-          <h2 className="text-2xl font-semibold text-white">Inventory history</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Recent stock adjustments performed by admin and service users.
-          </p>
+        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-white">Inventory history</h2>
+
+            <p className="mt-1 text-sm text-slate-400">
+              Stock adjustments performed by admin and service users.
+            </p>
+          </div>
+          <input
+            value={historySearch}
+            onChange={(e) => {
+              setHistorySearch(e.target.value);
+              setHistoryPage(1);
+            }}
+            placeholder="Search by SKU, user name, user ID, product ID"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 sm:w-96"
+          />
+          <span className="rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+            {filteredInventoryEvents.length} events
+          </span>
         </div>
 
-        {inventoryEvents.length === 0 ? (
+        {filteredInventoryEvents.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
             No inventory history yet.
           </div>
         ) : (
-          <div className="space-y-3">
-            {inventoryEvents.slice(0, 10).map((event) => {
-              const actorName =
-                [event.first_name, event.last_name].filter(Boolean).join(" ") ||
-                "Unknown user";
+          <>
+            <div className="overflow-hidden rounded-2xl border border-slate-800">
+              <div className="grid grid-cols-[1.2fr_1fr_1fr_0.7fr_0.8fr] gap-4 border-b border-slate-800 bg-slate-950/70 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div>User</div>
+                <div>SKU</div>
+                <div>Date</div>
+                <div>Delta</div>
+                <div>Stock</div>
+              </div>
 
-              return (
-                <div
-                  key={event.id}
-                  className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-semibold text-white">{actorName}</p>
-                      <p className="mt-1 text-sm text-slate-400">
-                        User ID #{event.user_id} adjusted SKU{" "}
-                        <span className="font-semibold text-cyan-300">{event.sku}</span>
-                      </p>
-                    </div>
+              <div className="divide-y divide-slate-800">
+                {filteredInventoryEvents
+                  .slice((historyPage - 1) * 10, historyPage * 10)
+                  .map((event) => {
+                    const actorName =
+                      [event.first_name, event.last_name].filter(Boolean).join(" ") ||
+                      "Unknown user";
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                          event.delta >= 0
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                            : "border-rose-500/30 bg-rose-500/10 text-rose-300"
-                        }`}
+                    const isIncrease = event.delta >= 0;
+
+                    return (
+                      <div
+                        key={event.id}
+                        className="grid grid-cols-[1.2fr_1fr_1fr_0.7fr_0.8fr] gap-4 bg-slate-950/40 px-5 py-4 text-sm transition hover:bg-slate-900/60"
                       >
-                        {event.delta >= 0 ? `+${event.delta}` : event.delta}
-                      </span>
+                        <div>
+                          <p className="font-semibold text-white">{actorName}</p>
 
-                      <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-300">
-                        {event.old_stock} → {event.new_stock}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            User ID #{event.user_id}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center">
+                          <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
+                            {event.sku}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center text-slate-400">
+                          {new Date(event.created_at).toLocaleString()}
+                        </div>
+
+                        <div className="flex items-center">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                              isIncrease
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                                : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                            }`}
+                          >
+                            {isIncrease ? `+${event.delta}` : event.delta}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center">
+                          <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-300">
+                            {event.old_stock} → {event.new_stock}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {filteredInventoryEvents.length > 10 && (
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  disabled={historyPage === 1}
+                  onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ←
+                </button>
+
+                {Array.from(
+                  { length: Math.ceil(filteredInventoryEvents.length / 10)
+                   },
+                  (_, index) => index + 1
+                ).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setHistoryPage(item)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                      historyPage === item
+                        ? "border-cyan-400 bg-cyan-400/15 text-cyan-300"
+                        : "border-slate-700 bg-slate-950 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-200"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  disabled={historyPage === Math.ceil(filteredInventoryEvents.length / 10)}
+                  onClick={() =>
+                    setHistoryPage((prev) =>
+                      Math.min(Math.ceil(filteredInventoryEvents.length / 10), prev + 1)
+                    )
+                  }
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
