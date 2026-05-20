@@ -1,16 +1,43 @@
-# Warehouse Operations Service (FastAPI)
+# Warehouse Operations Service
 
-Backend service for warehouse order processing, built with FastAPI, SQLAlchemy, and PostgreSQL.
+Full-stack warehouse order management system built with FastAPI, React, PostgreSQL, and Docker.
 
 This project simulates a real-world warehouse workflow:
 Order → Reserve → Start Pick → Confirm Pick → Ship
 
-✅ Key Capabilities
+## 🌐 Live Demo
+
+- **Frontend:** https://fastapi-auth-orders-v3.vercel.app
+- **API Docs (Swagger):** https://warehouse-api-pzhs.onrender.com/docs
+
+---
+
+## ✅ Key Capabilities
 
 - End-to-end order workflow
 - Role-Based Access Control (RBAC)
 - Transaction-safe stock handling
 - Full integration test coverage
+- CI/CD with GitHub Actions
+
+---
+
+## 🧱 Tech Stack
+
+**Backend**
+- FastAPI, SQLAlchemy, PostgreSQL (hosted on Supabase), Alembic
+- Docker / Docker Compose
+- Pytest (18 integration tests)
+- GitHub Actions (CI)
+
+**Frontend**
+- React + TypeScript + Vite
+- Role-aware navigation based on backend RBAC
+- JWT access + refresh token flow
+- Operational dashboard with live order metrics
+- Orders workspace with product catalog and lifecycle controls
+- Inventory management with stock history and CSV export
+- Admin panel for user and role management
 
 ---
 
@@ -18,62 +45,96 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 
 ### Core Functionality
 
-- Order lifecycle management (create order, reserve, start pick, confirm pick, ship)
-- Stock reservation with transactional safety
+- Order lifecycle management (create → reserve → start pick → confirm pick → ship)
+- Stock reservation with transactional safety (FOR UPDATE locking)
 - Idempotent operations (retry-safe endpoints)
 - Audit trail for all state transitions
+- Background archive worker — completed orders archived after 5 minutes (async)
+- Product and inventory management with stock history
 
 ### Authentication & Security
 
 - JWT authentication (access + refresh tokens)
-- User registration with email/password and optional profile fields
+- User registration with email/password and profile fields
 - Password recovery via 6-digit email reset code with expiration and attempt limits
 - Refresh token invalidation after password reset
-- Role-Based Access Control (RBAC)
-  - `admin`
-  - `operator`
-  - `service`
+- Role-Based Access Control (RBAC): `admin`, `operator`, `service`
 - Request ID middleware for traceability
 - Global exception handling
 
 ### Data Integrity (Enterprise-grade)
 
 - Soft delete for users (`is_deleted`, `deleted_at`)
-- Protection against deleting the last active admin (API level)
-- Protection against deleting the last active admin (DB trigger)
+- Protection against deleting the last active admin (API level + DB trigger)
 - Role validation and access enforcement
 - Admin audit trail for user role changes and soft deletions
 
 ### Observability
 
 - Structured logging with request correlation (`X-Request-ID`)
-- Metrics endpoint (admin-only)
+- Metrics endpoint (admin-only, Prometheus)
 - Health endpoints (`/ops/live`, `/ops/ready`)
+- External uptime monitoring via UptimeRobot (pings `/ops/live`)
+
+### Frontend (React)
+
+**Operational Dashboard**
+- Live order metrics by status: Total / New / Reserved / In Progress / Shipped / Cancelled
+- Recent activity feed with search, status filter, and role filter
+- Full audit trail search by Order ID (all events, not just recent)
+- Workflow overview visualization (NEW → RESERVED → PICKING → PICKED → SHIPPED)
+- Quick actions panel and link to system metrics
+
+**Orders Workspace**
+- Product catalog with search by name, SKU, or ID
+- Quantity selector per product and one-click order creation
+- "Load and operate" panel — fetch any order by ID and execute lifecycle transitions
+- My orders view with status badges (color-coded), item preview, and last activity timestamp
+- Order stats summary (Active / New / In progress)
+- Toggle between active and archived orders
+- Date range filter + search + CSV export
+
+**Inventory Management**
+- Product cards with stock levels and LOW STOCK / HEALTHY indicators
+- Modify stock directly from the UI
+- Inventory history table: user, SKU, delta (+/-), before/after stock, timestamp
+- Date range filtering, search, and CSV export
+
+**Admin Panel**
+- User list with role badges
+- Role management and profile editing per user
+- Soft delete with last-admin protection enforced in UI
+
+**Profile Page**
+- Live session data from `/auth/me` (display name, email, user ID, role)
+- Edit profile inline
+- Session security panel (tokens intentionally not exposed in UI)
 
 ---
 
-## Design Decisions
+## 🎯 Design Decisions
 
-- Role-based RBAC was chosen for simplicity and clarity.
-- A service layer separates business logic from routes.
-- A DB trigger protects the last active admin as a final safeguard.
-- A dedicated admin audit table preserves a history of role changes and soft deletions on users.
+- Service layer separates business logic from routes
+- FOR UPDATE locking prevents race conditions on stock reservation
+- DB trigger protects the last active admin as a final safeguard
+- Dedicated audit table for admin actions (role changes, soft deletes)
+- Archive worker runs as async background task on app lifespan
 
 ---
 
-## 🧱 Tech Stack
+## 🔐 Roles & Permissions
 
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Alembic (migrations)
-- Docker / Docker Compose
-- Pytest
+| Role     | Permissions                                          |
+|----------|------------------------------------------------------|
+| admin    | Full access + user management                        |
+| operator | Order workflow                                       |
+| service  | Integration endpoints + product/inventory management |
 
 ---
 
 ## 📊 Architecture Overview
 
+```
 Request
 ↓
 FastAPI Router
@@ -87,20 +148,11 @@ Business Logic (Services)
 Database (PostgreSQL)
 ↓
 Response (JSON)
+```
 
 ---
 
-## 🔐 Roles & Permissions
-
-| Role     | Permissions                          |
-|----------|--------------------------------------|
-| admin    | Full access + user management        |
-| operator | Order workflow                       |
-| service  | Integration endpoints only           |
-
----
-
-## 🧪 Running the Project
+## 🧪 Running Locally
 
 ### Start services
 
@@ -117,90 +169,89 @@ docker compose down
 ### Run migrations
 
 ```bash
-docker compose exec api alembic current
-```
-
-```bash
-docker compose exec api alembic revision -m "..."
-```
-
-```bash
 docker compose exec api alembic upgrade head
 ```
 
-### Check containers
+### Run tests
 
 ```bash
-docker compose ps -a
+docker compose exec api pytest -q
 ```
 
 ---
 
 ## ⚙️ CI
 
-A GitHub Actions workflow runs the backend validation pipeline automatically on push and pull request.
-
-Current CI steps:
-- build Docker services
-- run Alembic migrations
-- run the test suite
-- show container logs on failure
+GitHub Actions runs automatically on push and pull request:
+- Build Docker services
+- Run Alembic migrations
+- Run the test suite
+- Show container logs on failure
 
 ---
 
-## Example Endpoints
+## 📋 API Endpoints
 
 ### Ops
-- GET /ops/live
-- GET /ops/ready
+- `GET /ops/live` — Liveness probe
+- `GET /ops/ready` — Readiness probe (DB)
+- `GET /ops/activity` — Recent activity feed
+- `POST /ops/archive-orders` — Archive completed orders
 
 ### Auth
-- POST /auth/register
-- POST /auth/login
-- POST /auth/forgot-password
-- POST /auth/reset-password
-- POST /auth/refresh
-- POST /auth/logout
-- GET /auth/me
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `PATCH /auth/me`
 
 ### Orders
-- POST /orders
-- GET /orders/{order_id}
-- POST /orders/{order_id}/reserve
-- POST /orders/{order_id}/retry-reserve
-- POST /orders/{order_id}/start-pick
-- POST /orders/{order_id}/confirm-pick
-- POST /orders/{order_id}/ship
-- POST /orders/{order_id}/cancel
+- `POST /orders`
+- `GET /orders/products` — List products
+- `GET /orders/{order_id}`
+- `GET /orders/my`
+- `GET /orders/{order_id}/events`
+- `POST /orders/{order_id}/reserve`
+- `POST /orders/{order_id}/retry-reserve`
+- `POST /orders/{order_id}/start-pick`
+- `POST /orders/{order_id}/confirm-pick`
+- `POST /orders/{order_id}/ship`
+- `POST /orders/{order_id}/cancel`
 
-### Integrations
-- POST /integrations/orders/{order_id}/reserve
-- POST /integrations/orders/{order_id}/release
+### Integrations (service only)
+- `POST /integrations/orders/{order_id}/reserve`
+- `POST /integrations/orders/{order_id}/release`
 
 ### User Management (admin only)
-- DELETE /users/{user_id}
-- PATCH /users/{user_id}/role
+- `GET /users`
+- `PATCH /users/{user_id}/profile` — Update user profile
+- `DELETE /users/{user_id}`
+- `PATCH /users/{user_id}/role`
+
+### Products (admin + service)
+- `GET /products`
+- `POST /products`
+- `PATCH /products/{product_id}/stock`
+- `GET /products/history`
 
 ---
 
 ## 🛡️ Data Integrity Rules
 
 - At least one active admin must always exist
-- Enforced at:
-	- API level (business logic)
-	- Database level (PostgreSQL trigger)
+- Enforced at API level (business logic) and DB level (PostgreSQL trigger)
 
 ---
 
 ## 📌 Notes
 
-- Registration supports optional profile fields: `first_name`, `last_name`
 - Password reset uses a 6-digit code with expiration and attempt limits
 - New password must be different from the current password
 - Password reset revokes existing refresh tokens
-- Soft-deleted users cannot:
-	- login
-	- access protected endpoints
+- Soft-deleted users cannot login or access protected endpoints
 - Tokens are invalidated if user becomes inactive
 
 ---
@@ -209,112 +260,40 @@ Current CI steps:
 
 - Clean API design with FastAPI
 - Real-world RBAC implementation
-- Transaction-safe business logic
+- Transaction-safe business logic with FOR UPDATE locking
 - Defensive programming (API + DB constraints)
 - Production-like structure and practices
+- Full-stack integration (React frontend + FastAPI backend)
+- Operational UX: live metrics, audit trails, CSV exports, role-aware UI
 
 ---
 
-## 📬 Future Improvements
+## 🧪 Testing Strategy (18 tests)
 
-- Seed script for demo data
-- Frontend dashboard (React)
-- Permission-based RBAC (roles → permissions)
-
----
-
-## 🧪 Testing Strategy
-
-Main test file:
-- tests/test_api.py
-
-Run tests:
-```bash
-docker compose exec api pytest -q
-```
-
-The test suite includes integration tests covering API behavior, RBAC, data integrity, and password recovery flows.
-
-### What is tested
-
-1. Health endpoints  
-- /ops/live  
-- /ops/ready  
-(test_ops_endpoints)
-
-2. Authentication  
-- Login flow  
-- /auth/me requires token  
-(test_auth_me_requires_token)
-
-3. Order lifecycle (happy path)  
-- Create → Reserve → Start Pick → Confirm Pick → Ship  
-(test_happy_path_order_flow_operator)
-
-4. Order transition validation  
-- Invalid transitions return 409 (e.g. start picking from NEW)  
-(test_strict_transition_start_pick_from_new_is_409)
-
-5. RBAC - service role  
-- Service cannot access core order endpoints  
-- Service can use integration endpoints  
-(test_service_cannot_access_orders_but_can_use_integrations)
-
-6. RBAC - operator restrictions  
-- Operator cannot access admin-only endpoints (/metrics)  
-(test_operator_cannot_access_metrics)
-
-7. Soft delete behavior  
-- Soft-deleted users cannot log in  
-(test_soft_deleted_user_cannot_login)
-
-8. Admin safety constraint  
-- Cannot delete the last active admin  
-(test_cannot_delete_last_active_admin)
-
+1. Health endpoints (`/ops/live`, `/ops/ready`)
+2. Authentication flow + `/auth/me` requires token
+3. Order lifecycle happy path (Create → Reserve → Pick → Ship)
+4. Invalid order transitions return 409
+5. RBAC — service role restrictions
+6. RBAC — operator cannot access admin endpoints
+7. Soft delete — deleted users cannot log in
+8. Admin safety constraint — cannot delete last active admin
 9. Registration with optional profile fields
-- first_name and last_name are stored correctly
-(test_register_with_optional_first_and_last_name)
-
-10. Forgot password flow
-- Returns the same generic response for existing and unknown email
-(test_forgot_password_returns_generic_response_for_existing_and_unknown_email)
-
-11. Forgot password persistence
-- Creates a password reset record for an existing user
-(test_forgot_password_creates_reset_code_for_existing_user)
-
-12. Reset password success
-- Valid reset code updates password and revokes old refresh tokens
-(test_reset_password_with_valid_code_revokes_old_refresh_tokens)
-
-13. Reset password invalid code handling
-- Wrong code returns 400 and increments attempt count
-(test_reset_password_fails_with_wrong_code_and_increments_attempt_count)
-
-14. Reset password validation
-- Mismatched passwords return 400
-(test_reset_password_fails_when_passwords_do_not_match)
-
-15. Reset password expiration
-- Expired code returns 400
-(test_reset_password_fails_with_expired_code)
-
-16. Reset password reuse prevention
-- Reset fails if the new password matches the current password
-(test_reset_password_fails_if_new_password_matches_current_password)
-
-17. User role audit event
-- Role updates create an admin audit record with actor, old role, and new role
-(test_update_user_role_creates_admin_audit_event)
-
+10. Forgot password — generic response for existing/unknown email
+11. Forgot password — creates reset code for existing user
+12. Reset password — valid code updates password + revokes refresh tokens
+13. Reset password — wrong code increments attempt count
+14. Reset password — mismatched passwords return 400
+15. Reset password — expired code returns 400
+16. Reset password — new password must differ from current
+17. User role audit event on role update
 18. User soft delete audit event
-- Soft delete creates an admin audit record with actor and previous role
-(test_soft_delete_user_creates_admin_audit_event)
 
 ---
 
-## 🔧 Useful Links
+## 🔧 Future Improvements
 
-- API docs: http://localhost:8000/docs
-- Metrics: http://localhost:8000/metrics (admin only)
+- Permission-based access control to replace hardcoded role checks
+- Rate limiting on auth endpoints
+- WebSocket / SSE for real-time dashboard updates
+- Email notifications for order state transitions
