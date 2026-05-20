@@ -102,3 +102,17 @@ export interface OrderEvent {
 
 export type AuthTokens = AuthResponse;
 export type TokenResponse = AuthResponse;
+
+export type OrderStatus =
+  | "NEW"
+  | "RESERVED"
+  | "PICKING"
+  | "PICKED"
+  | "SHIPPED"
+  | "CANCELLED"
+  | "FAILED_RESERVATION";
+
+export interface ApiErrorResponse {
+  detail: string | { msg: string }[];
+  request_id?: string;
+}
