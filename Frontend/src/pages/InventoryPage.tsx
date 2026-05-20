@@ -73,22 +73,28 @@ export function InventoryPage() {
     fetchProducts();
   }, []);
 
-  async function addStock(product: Product) {
+  async function adjustStock(product: Product) {
     const delta = stockDeltaByProduct[product.id] ?? 0;
+    const nextStock = product.stock_qty + delta;
 
-    if (delta <= 0) {
-        toast.error("Quantity to add must be greater than 0.");
-        return;
+    if (delta === 0) {
+      toast.error("Adjustment cannot be 0.");
+      return;
     }
 
-    await updateStock(product.id, product.stock_qty + delta);
+    if (nextStock < 0) {
+      toast.error("Stock cannot go below 0.");
+      return;
+    }
+
+    await updateStock(product.id, nextStock);
 
     setEditingProductId(null);
     setStockDeltaByProduct((prev) => ({
-        ...prev,
-        [product.id]: 0,
+      ...prev,
+      [product.id]: 0,
     }));
-    }
+  }
 
   async function createProduct() {
     if (!sku.trim() || !name.trim()) {
@@ -190,7 +196,6 @@ export function InventoryPage() {
 
           <input
             type="number"
-            min={0}
             value={stockQty}
             onChange={(e) => setStockQty(Math.max(0, Number(e.target.value)))}
             className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-cyan-400"
@@ -309,7 +314,7 @@ export function InventoryPage() {
                                 onClick={() =>
                                 setStockDeltaByProduct((prev) => ({
                                     ...prev,
-                                    [product.id]: Math.max(0, (prev[product.id] ?? 0) - 1),
+                                    [product.id]: (prev[product.id] ?? 0) - 1,
                                 }))
                                 }
                                 className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/70 bg-rose-500/20 text-lg font-bold text-rose-200 transition hover:bg-rose-500/30 hover:text-white"
@@ -319,12 +324,11 @@ export function InventoryPage() {
 
                             <input
                                 type="number"
-                                min={0}
                                 value={stockDeltaByProduct[product.id] ?? 0}
                                 onChange={(e) =>
                                 setStockDeltaByProduct((prev) => ({
                                     ...prev,
-                                    [product.id]: Math.max(0, Number(e.target.value)),
+                                    [product.id]: (prev[product.id] ?? 0) - 1,
                                 }))
                                 }
                                 className="[appearance:textfield] w-20 bg-transparent text-center text-sm font-bold text-white outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -345,7 +349,7 @@ export function InventoryPage() {
                             </div>
 
                             <p className="text-xs text-slate-400">
-                            New stock will be{" "}
+                            Resulting stock:{" "}
                             <span className="font-semibold text-white">
                                 {product.stock_qty + (stockDeltaByProduct[product.id] ?? 0)}
                             </span>
@@ -353,9 +357,14 @@ export function InventoryPage() {
 
                             <div className="flex gap-2">
                             <button
-                                type="button"
-                                onClick={() => addStock(product)}
-                                className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                              type="button"
+                              onClick={() => adjustStock(product)}
+                              disabled={
+                                product.stock_qty +
+                                  (stockDeltaByProduct[product.id] ?? 0) <
+                                0
+                              }
+                              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 Save
                             </button>
