@@ -116,6 +116,16 @@ def my_orders(
     )
 
     for order in orders:
+        last_event = (
+            db.query(OrderEvent)
+            .filter(OrderEvent.order_id == order.id)
+            .order_by(OrderEvent.created_at.desc())
+            .first()
+        )
+
+        order.last_activity_at = (
+            last_event.created_at if last_event else None
+        )
         items = (
             db.query(OrderItem)
             .filter(OrderItem.order_id == order.id)
@@ -133,7 +143,21 @@ def my_orders(
 
         order.items = items
 
-    return orders
+    result = []
+
+    for order in orders:
+        result.append(
+            OrderOut(
+                id=order.id,
+                customer_id=order.customer_id,
+                reference=order.reference,
+                status=order.status,
+                items=order.items,
+                last_activity_at=order.last_activity_at,
+            )
+        )
+
+    return result
 
 
 @router.get("/{order_id}", response_model=OrderOut, summary="Get order")
