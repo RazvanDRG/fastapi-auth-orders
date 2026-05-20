@@ -49,8 +49,12 @@ async def archive_orders_worker():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(archive_orders_worker())
+    from alembic.config import Config
+    from alembic import command
+    alembic_cfg = Config("/app/alembic.ini")
+    command.upgrade(alembic_cfg, "head")
 
+    task = asyncio.create_task(archive_orders_worker())
     try:
         yield
     finally:
