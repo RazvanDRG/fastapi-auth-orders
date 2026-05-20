@@ -11,6 +11,19 @@ type Product = {
   stock_qty: number;
 };
 
+type InventoryEvent = {
+  id: number;
+  user_id: number;
+  product_id: number;
+  sku: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  old_stock: number;
+  new_stock: number;
+  delta: number;
+  created_at: string;
+};
+
 const PRODUCTS_PER_PAGE = 8;
 
 function getStockBadge(stock: number) {
@@ -31,6 +44,7 @@ export function InventoryPage() {
   const [page, setPage] = useState(1);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [stockDeltaByProduct, setStockDeltaByProduct] = useState<Record<number, number>>({});
+  const [inventoryEvents, setInventoryEvents] = useState<InventoryEvent[]>([]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -71,6 +85,7 @@ export function InventoryPage() {
 
   useEffect(() => {
     fetchProducts();
+    fetchInventoryHistory();
   }, []);
 
   async function adjustStock(product: Product) {
@@ -116,6 +131,7 @@ export function InventoryPage() {
       setName("");
       setStockQty(0);
       await fetchProducts();
+      await fetchInventoryHistory();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -131,6 +147,7 @@ export function InventoryPage() {
 
       toast.success("Stock updated.");
       await fetchProducts();
+      await fetchInventoryHistory();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     }
@@ -141,6 +158,15 @@ export function InventoryPage() {
       prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
     );
   }
+
+  async function fetchInventoryHistory() {
+  try {
+    const { data } = await http.get<InventoryEvent[]>("/products/history");
+    setInventoryEvents(data ?? []);
+  } catch (err: unknown) {
+    toast.error(getErrorMessage(err));
+  }
+}
 
   return (
     <div className="space-y-6">
@@ -413,6 +439,61 @@ export function InventoryPage() {
             >
               →
             </button>
+          </div>
+        )}
+      </section>
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
+        <div className="mb-5">
+          <h2 className="text-2xl font-semibold text-white">Inventory history</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Recent stock adjustments performed by admin and service users.
+          </p>
+        </div>
+
+        {inventoryEvents.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
+            No inventory history yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {inventoryEvents.slice(0, 10).map((event) => {
+              const actorName =
+                [event.first_name, event.last_name].filter(Boolean).join(" ") ||
+                "Unknown user";
+
+              return (
+                <div
+                  key={event.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-semibold text-white">{actorName}</p>
+                      <p className="mt-1 text-sm text-slate-400">
+                        User ID #{event.user_id} adjusted SKU{" "}
+                        <span className="font-semibold text-cyan-300">{event.sku}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                          event.delta >= 0
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                            : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                        }`}
+                      >
+                        {event.delta >= 0 ? `+${event.delta}` : event.delta}
+                      </span>
+
+                      <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-300">
+                        {event.old_stock} → {event.new_stock}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
