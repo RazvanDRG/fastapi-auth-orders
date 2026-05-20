@@ -47,6 +47,8 @@ export function InventoryPage() {
   const [inventoryEvents, setInventoryEvents] = useState<InventoryEvent[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historySearch, setHistorySearch] = useState("");
+  const [historyStartDate, setHistoryStartDate] = useState("");
+  const [historyEndDate, setHistoryEndDate] = useState("");
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -161,22 +163,34 @@ export function InventoryPage() {
     );
   }
 
-  const filteredInventoryEvents = inventoryEvents.filter((event) => {
+const filteredInventoryEvents = inventoryEvents.filter((event) => {
   const query = historySearch.trim().toLowerCase();
+  const eventTime = new Date(event.created_at).getTime();
 
-  if (!query) return true;
+  const startTime = historyStartDate
+    ? new Date(historyStartDate).getTime()
+    : null;
+
+  const endTime = historyEndDate
+    ? new Date(historyEndDate).getTime()
+    : null;
 
   const actorName = [event.first_name, event.last_name]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
-  return (
+  const matchesSearch =
+    !query ||
     actorName.includes(query) ||
     event.sku.toLowerCase().includes(query) ||
     String(event.user_id).includes(query) ||
-    String(event.product_id).includes(query)
-  );
+    String(event.product_id).includes(query);
+
+  const matchesStart = startTime === null || eventTime >= startTime;
+  const matchesEnd = endTime === null || eventTime <= endTime;
+
+  return matchesSearch && matchesStart && matchesEnd;
 });
 
   async function fetchInventoryHistory() {
@@ -463,26 +477,114 @@ export function InventoryPage() {
         )}
       </section>
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-white">Inventory history</h2>
+        <div className="mb-6 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">
+                Inventory history
+              </h2>
 
-            <p className="mt-1 text-sm text-slate-400">
-              Stock adjustments performed by admin and service users.
-            </p>
+              <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                Stock adjustments performed by admin and service users.
+              </p>
+            </div>
+
+            <span className="flex h-fit items-center rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
+              {filteredInventoryEvents.length} events
+            </span>
           </div>
-          <input
-            value={historySearch}
-            onChange={(e) => {
-              setHistorySearch(e.target.value);
-              setHistoryPage(1);
-            }}
-            placeholder="Search by SKU, user name, user ID, product ID"
-            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 sm:w-96"
-          />
-          <span className="rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-300">
-            {filteredInventoryEvents.length} events
-          </span>
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <input
+              value={historySearch}
+              onChange={(e) => {
+                setHistorySearch(e.target.value);
+                setHistoryPage(1);
+              }}
+              placeholder="Search by SKU, user name, user ID, product ID"
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 xl:w-96"
+            />
+
+            <div className="relative">
+              <input
+                type="datetime-local"
+                value={historyStartDate}
+                onChange={(e) => {
+                  setHistoryStartDate(e.target.value);
+                  setHistoryPage(1);
+                }}
+                onClick={(e) => e.currentTarget.showPicker?.()}
+                className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 pr-12 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+              />
+
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                stroke="currentColor"
+                className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-cyan-300"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.25 3v1.5M15.75 3v1.5M3.75 8.25h16.5M4.5 5.25h15a.75.75 0 01.75.75v12a.75.75 0 01-.75.75h-15A.75.75 0 013.75 18V6a.75.75 0 01.75-.75z"
+                />
+              </svg>
+            </div>
+
+            <div className="relative">
+              <input
+                type="datetime-local"
+                value={historyEndDate}
+                onChange={(e) => {
+                  setHistoryEndDate(e.target.value);
+                  setHistoryPage(1);
+                }}
+                onClick={(e) => e.currentTarget.showPicker?.()}
+                className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 pr-12 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0"
+              />
+
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                stroke="currentColor"
+                className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-cyan-300"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.25 3v1.5M15.75 3v1.5M3.75 8.25h16.5M4.5 5.25h15a.75.75 0 01.75.75v12a.75.75 0 01-.75.75h-15A.75.75 0 013.75 18V6a.75.75 0 01.75-.75z"
+                />
+              </svg>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await fetchInventoryHistory();
+                setHistoryPage(1);
+              }}
+              className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300"
+            >
+              Refresh
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setHistorySearch("");
+                setHistoryStartDate("");
+                setHistoryEndDate("");
+                setHistoryPage(1);
+              }}
+              className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-rose-500/40 hover:text-rose-300"
+            >
+              Clear
+            </button>
+          </div>
         </div>
 
         {filteredInventoryEvents.length === 0 ? (
