@@ -30,6 +30,34 @@ export function MetricsPage() {
 
   const metrics = useMemo(() => parseMetrics(rawMetrics), [rawMetrics]);
 
+  function findMetric(prefix: string) {
+    return metrics.find((metric) => metric.metric.startsWith(prefix));
+  }
+
+  const memoryMetric = findMetric("process_resident_memory_bytes");
+  const cpuMetric = findMetric("process_cpu_seconds_total");
+
+  const requestMetrics = metrics.filter((metric) =>
+    metric.metric.startsWith("http_requests_total")
+  );
+
+  const totalRequests = requestMetrics.reduce((sum, metric) => {
+    return sum + Number(metric.value);
+  }, 0);
+
+  const metricsHits =
+    requestMetrics.find((metric) =>
+      metric.metric.includes('handler="/metrics"')
+    )?.value ?? "0";
+
+  const memoryInMb = memoryMetric
+    ? (Number(memoryMetric.value) / 1024 / 1024).toFixed(1)
+    : "0";
+
+  const cpuSeconds = cpuMetric
+    ? Number(cpuMetric.value).toFixed(2)
+    : "0";
+
   return (
     <div className="space-y-6">
       <section className="rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8 shadow-2xl shadow-black/20">
@@ -67,30 +95,69 @@ export function MetricsPage() {
         </div>
       )}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {metrics.slice(0, 6).map((metric) => (
-          <div
-            key={metric.metric}
-            className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5"
-          >
-            <p className="text-xs uppercase tracking-wide text-slate-500">
-              Metric
-            </p>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            Memory usage
+          </p>
 
-            <p className="mt-3 text-3xl font-bold text-white">
-              {metric.value}
-            </p>
+          <p className="mt-4 text-4xl font-black text-white">
+            {memoryInMb}
+          </p>
 
-            <p className="mt-2 break-all text-sm text-slate-400">
-              {metric.metric}
-            </p>
-          </div>
-        ))}
+          <p className="mt-2 text-sm text-slate-400">
+            Resident memory (MB)
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            CPU time
+          </p>
+
+          <p className="mt-4 text-4xl font-black text-white">
+            {cpuSeconds}
+          </p>
+
+          <p className="mt-2 text-sm text-slate-400">
+            Total CPU seconds
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            HTTP requests
+          </p>
+
+          <p className="mt-4 text-4xl font-black text-white">
+            {totalRequests}
+          </p>
+
+          <p className="mt-2 text-sm text-slate-400">
+            Total processed requests
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            Metrics hits
+          </p>
+
+          <p className="mt-4 text-4xl font-black text-white">
+            {metricsHits}
+          </p>
+
+          <p className="mt-2 text-sm text-slate-400">
+            /metrics endpoint requests
+          </p>
+        </div>
       </section>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
         <div className="mb-5">
-          <h2 className="text-2xl font-semibold text-white">Raw scrape</h2>
+          <h2 className="text-2xl font-semibold text-white">
+            Raw scrape
+          </h2>
 
           <p className="mt-1 text-sm text-slate-400">
             Useful in a backend-oriented interview discussion.
