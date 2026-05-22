@@ -272,15 +272,7 @@ export function DashboardPage() {
         return matchesSearch && matchesStatus && matchesRole;
       })
       .sort((a, b) => {
-        const idDifference = getActivityEntityId(b) - getActivityEntityId(a);
-
-        if (idDifference !== 0) {
-          return idDifference;
-        }
-
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }, [activityFeed, activitySearch, statusFilter, roleFilter]);
 
