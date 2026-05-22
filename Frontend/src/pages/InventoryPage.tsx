@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/utils";
+import { useSSE } from "../hooks/useSSE";
 
 type Product = {
   id: number;
@@ -115,6 +116,13 @@ export function InventoryPage() {
       [product.id]: 0,
     }));
   }
+
+  useSSE((event) => {
+    if (event.type === "inventory_update" || event.type === "product_created") {
+      fetchProducts();
+      fetchInventoryHistory();
+    }
+  });
 
   async function createProduct() {
     if (!sku.trim() || !name.trim()) {

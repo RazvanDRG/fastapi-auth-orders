@@ -6,6 +6,7 @@ import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import type { Order, OrderEvent } from "../types/api";
 import { getRoleBadgeClasses } from "../lib/roles";
+import { useSSE } from "../hooks/useSSE";
 
 type OrderAction = {
   key: string;
@@ -209,6 +210,16 @@ export default function OrdersPage() {
       setOrdersPage(totalOrderPages);
     }
   }, [ordersPage, totalOrderPages]);
+
+  useSSE((event) => {
+    if (event.type === "order_update") {
+      fetchMyOrders({ silent: true });
+
+      if (selectedOrderIdRef.current) {
+        fetchOrderById(selectedOrderIdRef.current, { silent: true });
+      }
+    }
+  });
 
   async function fetchMyOrders(options?: { silent?: boolean }) {
     try {

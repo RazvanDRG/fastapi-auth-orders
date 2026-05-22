@@ -10,6 +10,7 @@ from app.models.product import Product
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.inventory_event import InventoryEvent
+from app.services.event_bus import publish
 
 router = APIRouter(
     prefix="/products",
@@ -79,6 +80,14 @@ def create_product(
         )
 
     db.commit()
+    if payload.stock_qty > 0:
+        publish({
+            "type": "product_created",
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "stock_qty": product.stock_qty,
+        })
     db.refresh(product)
 
     return product
@@ -117,6 +126,14 @@ def update_product_stock(
 
     db.add(product)
     db.commit()
+    publish({
+        "type": "inventory_update",
+        "product_id": product.id,
+        "sku": product.sku,
+        "name": product.name,
+        "stock_qty": product.stock_qty,
+        "delta": delta,
+    })
     db.refresh(product)
 
     return product
