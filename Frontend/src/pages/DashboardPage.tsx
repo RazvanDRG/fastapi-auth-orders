@@ -7,6 +7,7 @@ import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import { getRoleBadgeClasses } from "../lib/roles";
 import type { ActivityFeedItem, Order, OrderEvent } from "../types/api";
+import { useSSE } from "../hooks/useSSE";
 
 type DashboardMetrics = {
   totalOrders: number;
@@ -226,22 +227,25 @@ export function DashboardPage() {
 
     if (user.role === "service") {
       fetchInventoryMetrics(true);
-
-      const interval = setInterval(() => {
-        fetchInventoryMetrics(false);
-      }, 15000);
-
-      return () => clearInterval(interval);
+      return;
     }
 
     loadDashboard(true);
-
-    const interval = setInterval(() => {
-      loadDashboard(false);
-    }, 15000);
-
-    return () => clearInterval(interval);
   }, [user?.role]);
+
+  useSSE((event) => {
+    if (
+      event.type === "order_update" ||
+      event.type === "inventory_update" ||
+      event.type === "product_created"
+    ) {
+      if (user?.role === "service") {
+        fetchInventoryMetrics(false);
+      } else {
+        loadDashboard(false);
+      }
+    }
+  });
 
   useEffect(() => {
     setActivityPage(1);

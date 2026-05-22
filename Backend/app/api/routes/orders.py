@@ -21,6 +21,7 @@ from app.services.orders_service import (
     ship_order_flow,
     cancel_order_flow,
 )
+from app.services.event_bus import publish
 
 router = APIRouter(
     prefix="/orders",
@@ -33,6 +34,13 @@ def _request_id(request: Request) -> str | None:
     rid = getattr(request.state, "request_id", None)
     return rid or request.headers.get("X-Request-ID")
 
+def _publish_order(order) -> None:
+    publish({
+        "type": "order_update",
+        "order_id": order.id,
+        "reference": order.reference,
+        "status": str(order.status),
+    })
 
 @router.post("", response_model=OrderOut, summary="Create order")
 def create_order(
@@ -83,7 +91,7 @@ def create_order(
 
     db.commit()
     db.refresh(order)
-
+    _publish_order(order)
     return order
 
 
@@ -194,12 +202,14 @@ def reserve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return reserve_order_flow(
+    order = reserve_order_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
+    _publish_order(order)
+    return order
 
 
 @router.post("/{order_id}/start-pick", response_model=OrderOut, summary="Start picking")
@@ -209,12 +219,14 @@ def start_pick(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return start_pick_flow(
+    order = start_pick_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
+    _publish_order(order)
+    return order
 
 
 @router.post("/{order_id}/confirm-pick", response_model=OrderOut, summary="Confirm picked")
@@ -224,12 +236,14 @@ def confirm_pick(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return confirm_pick_flow(
+    order = confirm_pick_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
+    _publish_order(order)
+    return order
 
 
 @router.post("/{order_id}/ship", response_model=OrderOut, summary="Ship order")
@@ -239,12 +253,14 @@ def ship(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return ship_order_flow(
+    order = ship_order_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
+    _publish_order(order)
+    return order
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut, summary="Cancel order")
@@ -254,13 +270,14 @@ def cancel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return cancel_order_flow(
+    order = cancel_order_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
-
+    _publish_order(order)
+    return order
 
 @router.post(
     "/{order_id}/retry-reserve",
@@ -273,9 +290,11 @@ def retry_reserve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return retry_reserve_order_flow(
+    order = retry_reserve_order_flow(
         db=db,
         order_id=order_id,
         actor=current_user,
         request_id=_request_id(request),
     )
+    _publish_order(order)
+    return order
