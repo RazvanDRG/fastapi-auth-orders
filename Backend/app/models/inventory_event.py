@@ -22,7 +22,7 @@ class InventoryEvent(Base):
         index=True,
     )
 
-    sku: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_type: Mapped[str | None] = mapped_column(String(50), nullable=True, default="stock_adjusted")
 
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -33,6 +33,8 @@ class InventoryEvent(Base):
     new_stock: Mapped[int] = mapped_column(Integer, nullable=False)
 
     delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    sku: Mapped[str] = mapped_column(String(50), nullable=False)
 
     created_at = mapped_column(
         DateTime(timezone=True),

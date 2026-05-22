@@ -44,7 +44,11 @@ def list_products(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ProductOut, status_code=201, summary="Create product")
-def create_product(payload: CreateProductRequest, db: Session = Depends(get_db)):
+def create_product(
+    payload: CreateProductRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # adăugat
+):
     existing = db.scalar(select(Product).where(Product.sku == payload.sku.strip()))
 
     if existing:
@@ -57,6 +61,23 @@ def create_product(payload: CreateProductRequest, db: Session = Depends(get_db))
     )
 
     db.add(product)
+    db.flush()  # obținem product.id înainte de commit
+
+    if payload.stock_qty > 0:
+        db.add(
+            InventoryEvent(
+                user_id=current_user.id,
+                product_id=product.id,
+                sku=product.sku,
+                event_type="product_created",
+                first_name=current_user.first_name,
+                last_name=current_user.last_name,
+                old_stock=0,
+                new_stock=payload.stock_qty,
+                delta=payload.stock_qty,
+            )
+        )
+
     db.commit()
     db.refresh(product)
 

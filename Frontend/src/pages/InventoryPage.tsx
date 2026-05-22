@@ -16,6 +16,7 @@ type InventoryEvent = {
   user_id: number;
   product_id: number;
   sku: string;
+  event_type?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   old_stock: number;
@@ -679,6 +680,7 @@ function exportInventoryHistoryCsv() {
                       "Unknown user";
 
                     const isIncrease = event.delta >= 0;
+                    const isNewProduct = event.event_type === "product_created";
 
                     return (
                       <div
@@ -693,10 +695,15 @@ function exportInventoryHistoryCsv() {
                           </p>
                         </div>
 
-                        <div className="flex items-center">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
                             {event.sku}
                           </span>
+                          {isNewProduct && (
+                            <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-300">
+                              New
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center text-slate-400">
@@ -706,7 +713,9 @@ function exportInventoryHistoryCsv() {
                         <div className="flex items-center">
                           <span
                             className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                              isIncrease
+                              isNewProduct
+                                ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                                : isIncrease
                                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                                 : "border-rose-500/30 bg-rose-500/10 text-rose-300"
                             }`}
