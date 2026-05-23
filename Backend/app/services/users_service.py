@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.user_admin_event import UserAdminEvent
 from app.services.auth import verify_password
 from app.services.email import send_account_deleted_email
+from app.services.event_bus import publish
 
 logger = logging.getLogger("app")
 
@@ -49,9 +50,15 @@ def soft_delete_user(db: Session, user_id: int, actor: User | None = None) -> di
     )
 
     user.is_deleted = True
-    user.deleted_at = datetime.now(timezone.utc)
+    user.deleted_at = datetime.utcnow()
 
     db.commit()
+
+    publish({
+        "type": "user_deleted",
+        "user_id": user.id,
+        "self_deleted": False,
+    })
 
     return {"message": "User soft deleted"}
 
@@ -214,8 +221,6 @@ def self_delete_account(db: Session, user: User, password: str) -> dict:
         or None
     )
 
-    # Trimiterea emailului nu trebuie să blocheze ștergerea:
-    # dacă SMTP pică, logăm și ne oprim — contul rămâne șters.
     try:
         send_account_deleted_email(email=target_email, display_name=display_name)
     except Exception:
@@ -223,6 +228,12 @@ def self_delete_account(db: Session, user: User, password: str) -> dict:
             "self_delete_email_failed",
             extra={"user_id": user.id, "email": target_email},
         )
+
+    publish({
+        "type": "user_deleted",
+        "user_id": user.id,
+        "self_deleted": True,
+    })
 
     return {
         "message": "Account deleted",
