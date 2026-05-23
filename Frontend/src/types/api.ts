@@ -39,6 +39,16 @@ export interface User {
   created_at?: string;
 }
 
+export interface DeletedUser {
+  id: number;
+  email: string;
+  role: Role;
+  first_name?: string | null;
+  last_name?: string | null;
+  deleted_at: string | null;
+  self_deleted: boolean;
+}
+
 export interface Product {
   id: number;
   sku: string;

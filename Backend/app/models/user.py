@@ -21,3 +21,7 @@ class User(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Brute-force protection pentru DELETE /auth/me
+    delete_failed_attempts = Column(Integer, nullable=False, default=0)
+    delete_locked_until = Column(DateTime(timezone=True), nullable=True)

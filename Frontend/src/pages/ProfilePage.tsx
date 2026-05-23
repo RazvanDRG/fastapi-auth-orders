@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { http } from "../lib/http";
 import { getErrorMessage } from "../lib/error";
 import { getRoleBadgeClasses } from "../lib/roles";
 
 export function ProfilePage() {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, deleteAccount } = useAuth();
+  const navigate = useNavigate();
 
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
 
   const [firstName, setFirstName] = useState(user?.first_name ?? "");
   const [lastName, setLastName] = useState(user?.last_name ?? "");
@@ -70,6 +75,41 @@ export function ProfilePage() {
     setIsEditing(false);
   }
 
+  function openDeleteConfirm() {
+    setDeleteConfirmPassword("");
+    setShowDeleteConfirm(true);
+  }
+
+  function closeDeleteConfirm() {
+    if (deleting) return;
+    setShowDeleteConfirm(false);
+    setDeleteConfirmPassword("");
+  }
+
+  async function handleDeleteAccount() {
+    if (!user) return;
+
+    if (!deleteConfirmPassword) {
+      toast.error("Please enter your password.");
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      await deleteAccount(deleteConfirmPassword);
+      toast.success(
+        "Your account has been deleted. A confirmation email is on its way."
+      );
+      navigate("/login", { replace: true });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to delete account."));
+      setDeleting(false);
+      // Curățăm parola din câmp ca user-ul să poată reîncerca curat,
+      // dar lăsăm modal-ul deschis.
+      setDeleteConfirmPassword("");
+    }
+  }
+  
   return (
     <div className="space-y-6">
       <div>
@@ -209,6 +249,16 @@ export function ProfilePage() {
                   Edit profile
                 </button>
               )}
+
+              {!isEditing && (
+                <button
+                  type="button"
+                  onClick={openDeleteConfirm}
+                  className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20"
+                >
+                  Delete account
+                </button>
+              )}
             </div>
           </div>
         </section>
@@ -244,6 +294,61 @@ export function ProfilePage() {
           </div>
         </section>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+            <div>
+              <h3 className="text-2xl font-semibold text-white">
+                Delete your account?
+              </h3>
+
+              <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                This will deactivate your account and immediately sign you out
+                on all devices. A confirmation email will be sent to{" "}
+                <span className="font-semibold text-white">{user?.email}</span>.
+                Your data is retained for audit and recovery purposes.
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">
+                Enter your password to confirm
+              </label>
+
+              <input
+                type="password"
+                value={deleteConfirmPassword}
+                onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                disabled={deleting}
+                autoComplete="current-password"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteConfirm}
+                disabled={deleting}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting || !deleteConfirmPassword}
+                className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-5 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete my account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

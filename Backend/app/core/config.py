@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     password_reset_code_ttl_minutes: int = 10
     password_reset_max_attempts: int = 5
     password_reset_code_salt: str
+
+    # Delete account brute-force protection
+    delete_account_max_attempts: int = 5
+    delete_account_lock_minutes: int = 15
     
 
 model_config = SettingsConfigDict(env_file=".env")
