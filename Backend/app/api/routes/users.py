@@ -1,4 +1,5 @@
 from typing import Literal
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
@@ -10,6 +11,7 @@ from app.core.roles import Roles
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.models.user_admin_event import UserAdminEvent
 from app.services.users_service import soft_delete_user, update_user_role
 
 router = APIRouter(
@@ -30,6 +32,17 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class DeletedUserOut(BaseModel):
+    id: int
+    email: EmailStr
+    role: Literal["admin", "operator", "service"]
+    first_name: str | None = None
+    last_name: str | None = None
+    deleted_at: datetime | None = None
+    self_deleted: bool = False
+
+    class Config:
+        from_attributes = True
 
 class UpdateUserRoleRequest(BaseModel):
     role: Literal["admin", "operator", "service"]
@@ -39,6 +52,59 @@ class UpdateUserProfileRequest(BaseModel):
     email: EmailStr
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
+
+
+@router.get(
+    "/deleted",
+    response_model=list[DeletedUserOut],
+    summary="List soft-deleted users (audit)",
+)
+def list_deleted_users(
+    db: Session = Depends(get_db),
+):
+    """
+    Returnează userii cu cont șters, sortați după data ștergerii (recent → vechi).
+    Marchează self_deleted=True pentru cei care și-au șters singuri contul.
+    """
+    users = (
+        db.execute(
+            select(User)
+            .where(User.is_deleted == True)  # noqa: E712
+            .order_by(User.deleted_at.desc().nullslast(), User.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+    if not users:
+        return []
+
+    user_ids = [u.id for u in users]
+
+    # Set cu id-urile celor care au cel puțin un eveniment USER_SELF_DELETED
+    self_delete_user_ids = set(
+        db.execute(
+            select(UserAdminEvent.user_id).where(
+                UserAdminEvent.user_id.in_(user_ids),
+                UserAdminEvent.action == "USER_SELF_DELETED",
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return [
+        DeletedUserOut(
+            id=u.id,
+            email=u.email,
+            role=u.role,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            deleted_at=u.deleted_at,
+            self_deleted=u.id in self_delete_user_ids,
+        )
+        for u in users
+    ]
 
 
 @router.get("", response_model=list[UserOut], summary="List users")

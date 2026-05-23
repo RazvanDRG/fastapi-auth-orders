@@ -17,6 +17,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     MessageResponse,
     UpdateProfileRequest,
+    DeleteAccountRequest,
 )
 from app.services.auth import (
     hash_password,
@@ -31,6 +32,7 @@ from app.services.refresh_tokens import (
     rotate_refresh_token,
     revoke_refresh_token,
 )
+from app.services.users_service import self_delete_account
 
 router = APIRouter(prefix="/auth", tags=["Login"])
 
@@ -172,3 +174,12 @@ def update_profile(
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
     }
+    
+    
+@router.delete("/me", summary="Delete the currently authenticated user's account")
+def delete_my_account(
+    payload: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return self_delete_account(db, current_user, password=payload.password)

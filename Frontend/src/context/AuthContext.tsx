@@ -20,6 +20,7 @@ export type AuthContextValue = {
   forgotPassword: (payload: ForgotPasswordRequest) => Promise<{ message: string }>;
   resetPassword: (payload: ResetPasswordRequest) => Promise<{ message: string }>;
   logout: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<{ message: string; deleted_at?: string }>;
   refreshProfile: () => Promise<User | null>;
 };
 
@@ -106,6 +107,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+const deleteAccount = useCallback(async (password: string) => {
+    const { data } = await http.delete<{ message: string; deleted_at?: string }>(
+      "/auth/me",
+      { data: { password } }
+    );
+
+    tokenStorage.clear();
+    setTokens(null);
+    setUser(null);
+
+    return data;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -117,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       logout,
+      deleteAccount,
       refreshProfile,
     }),
     [
@@ -128,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgotPassword,
       resetPassword,
       logout,
+      deleteAccount,
       refreshProfile,
     ]
   );
