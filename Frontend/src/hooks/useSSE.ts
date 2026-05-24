@@ -11,10 +11,15 @@ export function useSSE(onEvent: (data: Record<string, unknown>) => void) {
   useEffect(() => {
     let active = true;
     let controller = new AbortController();
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function connect() {
+      if (!active) return;
+
       const tokens = tokenStorage.get();
       if (!tokens?.access_token) return;
+
+      controller = new AbortController();
 
       try {
         const response = await fetch(`${API_BASE_URL}/sse/stream`, {
@@ -39,20 +44,19 @@ export function useSSE(onEvent: (data: Record<string, unknown>) => void) {
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               try {
-                const data = JSON.parse(line.slice(6));
-                onEventRef.current(data);
+                onEventRef.current(JSON.parse(line.slice(6)));
               } catch {
-                // ignore
+                // ignore invalid SSE payloads
               }
             }
           }
         }
       } catch {
-        // ignore abort errors
+        // ignore abort/network errors
       }
 
       if (active) {
-        setTimeout(connect, 3000);
+        reconnectTimer = setTimeout(connect, 3000);
       }
     }
 
@@ -61,6 +65,10 @@ export function useSSE(onEvent: (data: Record<string, unknown>) => void) {
     return () => {
       active = false;
       controller.abort();
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
     };
   }, []);
 }
