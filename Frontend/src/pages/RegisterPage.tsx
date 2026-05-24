@@ -71,24 +71,17 @@ export function RegisterPage() {
 
   const NAME_REGEX = /^[A-Za-z]+$/;
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const PASSWORD_UPPERCASE_REGEX = /[A-Z]/;
-  const PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/;
-  const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/;
 
   const isFirstNameValid = NAME_REGEX.test(firstName.trim());
   const isLastNameValid = NAME_REGEX.test(lastName.trim());
-  const isPasswordValid =
-    password.length >= 8 &&
-    password.length <= 64 &&
-    PASSWORD_UPPERCASE_REGEX.test(password) &&
-    PASSWORD_SPECIAL_CHAR_REGEX.test(password);
+  const isPasswordValid = PASSWORD_REGEX.test(password);
 
   const doPasswordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   const isFormValid =
     isFirstNameValid &&
     isLastNameValid &&
-    email.trim().length > 0 &&
+    EMAIL_REGEX.test(email.trim().toLowerCase()) &&
     isPasswordValid &&
     doPasswordsMatch;
 
@@ -165,17 +158,25 @@ export function RegisterPage() {
         first_name: cleanFirstName,
         last_name: cleanLastName,
       });
+      
+      toast.success("Account created successfully.");
 
-    } catch (error: any) {
-      const message =
-        error?.response?.data?.detail ||
-        "Could not create account.";
+      setTimeout(() => {
+        navigate("/login");
+      }, 1000);
 
-      setFormError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
+      } catch (err: unknown) {
+        const message = getErrorMessage(
+          err,
+          "Could not create account."
+        );
+
+        setFormError(message);
+        toast.error(message);
+      } finally {
+        setLoading(false);
+      }
+
   }
 
   return (
