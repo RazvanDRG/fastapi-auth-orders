@@ -7,7 +7,6 @@ import { getErrorMessage } from "../lib/utils";
 import type { DeletedUser } from "../types/api";
 import { useSSE } from "../hooks/useSSE";
 
-
 type Role = "admin" | "operator" | "service";
 
 type UserItem = {
@@ -53,13 +52,47 @@ function getPaginationItems(current: number, total: number) {
   return [...new Set(items)];
 }
 
+function getUserDisplayName(user: {
+  first_name?: string | null;
+  last_name?: string | null;
+}) {
+  return [user.first_name, user.last_name].filter(Boolean).join(" ");
+}
+
+function getDeletedSourceLabel(user: DeletedUser) {
+  return user.self_deleted ? "self-deleted" : "by admin";
+}
+
+function matchesDateRange(
+  iso: string | null,
+  startDate: string,
+  endDate: string
+) {
+  if (!startDate && !endDate) return true;
+  if (!iso) return false;
+
+  const time = new Date(iso).getTime();
+
+  if (Number.isNaN(time)) return false;
+
+  const startTime = startDate ? new Date(startDate).getTime() : null;
+  const endTime = endDate ? new Date(endDate).getTime() : null;
+
+  const matchesStart = startTime === null || time >= startTime;
+  const matchesEnd = endTime === null || time <= endTime;
+
+  return matchesStart && matchesEnd;
+}
+
 export function AdminPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingUserId, setSavingUserId] = useState<number | null>(null);
   const [usersPage, setUsersPage] = useState(1);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [userPendingDelete, setUserPendingDelete] = useState<UserItem | null>(null);
+  const [userPendingDelete, setUserPendingDelete] = useState<UserItem | null>(
+    null
+  );
 
   const [deletedUsers, setDeletedUsers] = useState<DeletedUser[]>([]);
   const [loadingDeleted, setLoadingDeleted] = useState(false);
@@ -68,19 +101,102 @@ export function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<"active" | "deleted">("active");
 
-  // Only active accounts go in the main list under tab "Active accounts".
+  const [userSearch, setUserSearch] = useState("");
+  const [deletedStartDate, setDeletedStartDate] = useState("");
+  const [deletedEndDate, setDeletedEndDate] = useState("");
+
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyStartDate, setHistoryStartDate] = useState("");
+  const [historyEndDate, setHistoryEndDate] = useState("");
+
   const sortedUsers = useMemo(() => {
     return [...users]
       .filter((user) => !user.is_deleted)
       .sort((a, b) => a.id - b.id);
   }, [users]);
 
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+
+    if (!query) return sortedUsers;
+
+    return sortedUsers.filter((user) => {
+      const displayName = getUserDisplayName(user).toLowerCase();
+
+      const searchableText = [
+        displayName,
+        user.email,
+        user.role,
+        user.id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    });
+  }, [sortedUsers, userSearch]);
+
+  const filteredDeletedUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+
+    return deletedUsers.filter((user) => {
+      const displayName = getUserDisplayName(user).toLowerCase();
+      const source = getDeletedSourceLabel(user);
+
+      const searchableText = [
+        displayName,
+        user.email,
+        user.role,
+        user.id,
+        source,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !query || searchableText.includes(query);
+
+      return (
+        matchesSearch &&
+        matchesDateRange(user.deleted_at, deletedStartDate, deletedEndDate)
+      );
+    });
+  }, [deletedUsers, userSearch, deletedStartDate, deletedEndDate]);
+
+  const filteredHistory = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+
+    return deletedUsers.filter((user) => {
+      const displayName = getUserDisplayName(user).toLowerCase();
+      const source = getDeletedSourceLabel(user);
+
+      const searchableText = [
+        displayName,
+        user.email,
+        user.role,
+        user.id,
+        source,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !query || searchableText.includes(query);
+
+      return (
+        matchesSearch &&
+        matchesDateRange(user.deleted_at, historyStartDate, historyEndDate)
+      );
+    });
+  }, [deletedUsers, historySearch, historyStartDate, historyEndDate]);
+
   const totalUserPages = Math.max(
     1,
-    Math.ceil(sortedUsers.length / USERS_PAGE_SIZE)
+    Math.ceil(filteredUsers.length / USERS_PAGE_SIZE)
   );
 
-  const paginatedUsers = sortedUsers.slice(
+  const paginatedUsers = filteredUsers.slice(
     (usersPage - 1) * USERS_PAGE_SIZE,
     usersPage * USERS_PAGE_SIZE
   );
@@ -91,13 +207,12 @@ export function AdminPage() {
     }
   }, [usersPage, totalUserPages]);
 
-  // Pagination for tab "Deleted accounts" (cards)
   const totalDeletedPages = Math.max(
     1,
-    Math.ceil(deletedUsers.length / USERS_PAGE_SIZE)
+    Math.ceil(filteredDeletedUsers.length / USERS_PAGE_SIZE)
   );
 
-  const paginatedDeletedUsers = deletedUsers.slice(
+  const paginatedDeletedUsers = filteredDeletedUsers.slice(
     (deletedPage - 1) * USERS_PAGE_SIZE,
     deletedPage * USERS_PAGE_SIZE
   );
@@ -108,13 +223,12 @@ export function AdminPage() {
     }
   }, [deletedPage, totalDeletedPages]);
 
-  // Pagination for the deletion history table (audit, always visible at the bottom)
   const totalHistoryPages = Math.max(
     1,
-    Math.ceil(deletedUsers.length / USERS_PAGE_SIZE)
+    Math.ceil(filteredHistory.length / USERS_PAGE_SIZE)
   );
 
-  const paginatedHistory = deletedUsers.slice(
+  const paginatedHistory = filteredHistory.slice(
     (historyPage - 1) * USERS_PAGE_SIZE,
     historyPage * USERS_PAGE_SIZE
   );
@@ -160,7 +274,6 @@ export function AdminPage() {
 
   useSSE((event) => {
     if (event?.type === "user_deleted") {
-      // Re-fetch both lists: the user moved from "active" to "deleted".
       fetchUsers();
       fetchDeletedUsers();
     }
@@ -241,6 +354,95 @@ export function AdminPage() {
     }
   }
 
+  function clearUserFilters() {
+    setUserSearch("");
+    setDeletedStartDate("");
+    setDeletedEndDate("");
+    setUsersPage(1);
+    setDeletedPage(1);
+  }
+
+  function clearHistoryFilters() {
+    setHistorySearch("");
+    setHistoryStartDate("");
+    setHistoryEndDate("");
+    setHistoryPage(1);
+  }
+
+
+  function escapeCsv(value: string | number | null | undefined) {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) {
+    const csv = [headers.map(escapeCsv), ...rows.map((row) => row.map(escapeCsv))]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = filename;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
+  function exportUsersCsv() {
+    if (activeTab === "active") {
+      downloadCsv(
+        `active-users-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`,
+        ["user_id", "display_name", "email", "role", "is_deleted"],
+        filteredUsers.map((user) => [
+          user.id,
+          getUserDisplayName(user) || "Not provided",
+          user.email,
+          user.role,
+          user.is_deleted ? "yes" : "no",
+        ])
+      );
+
+      return;
+    }
+
+    downloadCsv(
+      `deleted-users-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`,
+      ["user_id", "display_name", "email", "role", "deleted_at", "source"],
+      filteredDeletedUsers.map((user) => [
+        user.id,
+        getUserDisplayName(user) || "Unnamed user",
+        user.email,
+        user.role,
+        formatDeletedDate(user.deleted_at),
+        getDeletedSourceLabel(user),
+      ])
+    );
+  }
+
+  function exportDeletionHistoryCsv() {
+    downloadCsv(
+      `deletion-history-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`,
+      ["user_id", "display_name", "email", "role", "deleted_at", "source"],
+      filteredHistory.map((user) => [
+        user.id,
+        getUserDisplayName(user) || "Unnamed user",
+        user.email,
+        user.role,
+        formatDeletedDate(user.deleted_at),
+        getDeletedSourceLabel(user),
+      ])
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -254,51 +456,123 @@ export function AdminPage() {
       </div>
 
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-white">Users</h2>
+        <div className="mb-5 flex flex-col gap-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">Users</h2>
 
-            <p className="mt-1 text-sm text-slate-400">
-              {activeTab === "active"
-                ? `Showing ${paginatedUsers.length} of ${sortedUsers.length} active accounts.`
-                : `Showing ${paginatedDeletedUsers.length} of ${deletedUsers.length} deleted accounts.`}
-            </p>
-          </div>
+              <p className="mt-1 text-sm text-slate-400">
+                {activeTab === "active"
+                  ? `Showing ${paginatedUsers.length} of ${filteredUsers.length} active accounts.`
+                  : `Showing ${paginatedDeletedUsers.length} of ${filteredDeletedUsers.length} deleted accounts.`}
+              </p>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-2xl border border-slate-700 bg-slate-950 p-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-2xl border border-slate-700 bg-slate-950 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("active");
+                    setUsersPage(1);
+                  }}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    activeTab === "active"
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-400 hover:text-cyan-200"
+                  }`}
+                >
+                  Active accounts
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("deleted");
+                    setDeletedPage(1);
+                  }}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    activeTab === "deleted"
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-400 hover:text-cyan-200"
+                  }`}
+                >
+                  Deleted accounts
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setActiveTab("active")}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                  activeTab === "active"
-                    ? "bg-cyan-400 text-slate-950"
-                    : "text-slate-400 hover:text-cyan-200"
-                }`}
+                onClick={refreshCurrentTab}
+                disabled={isRefreshingCurrentTab}
+                className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Active accounts
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("deleted")}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                  activeTab === "deleted"
-                    ? "bg-cyan-400 text-slate-950"
-                    : "text-slate-400 hover:text-cyan-200"
-                }`}
-              >
-                Deleted accounts
+                {isRefreshingCurrentTab ? "Refreshing..." : "Refresh"}
               </button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <input
+              value={userSearch}
+              onChange={(e) => {
+                setUserSearch(e.target.value);
+                setUsersPage(1);
+                setDeletedPage(1);
+              }}
+              placeholder={
+                activeTab === "active"
+                  ? "Search by name, email, user ID, role"
+                  : "Search by name, email, user ID, role, source"
+              }
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 xl:w-96"
+            />
+
+            {activeTab === "deleted" && (
+              <>
+                <input
+                  type="datetime-local"
+                  value={deletedStartDate}
+                  onChange={(e) => {
+                    setDeletedStartDate(e.target.value);
+                    setDeletedPage(1);
+                  }}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+                />
+
+                <input
+                  type="datetime-local"
+                  value={deletedEndDate}
+                  onChange={(e) => {
+                    setDeletedEndDate(e.target.value);
+                    setDeletedPage(1);
+                  }}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+                />
+              </>
+            )}
 
             <button
               type="button"
-              onClick={refreshCurrentTab}
-              disabled={isRefreshingCurrentTab}
-              className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={exportUsersCsv}
+              disabled={
+                activeTab === "active"
+                  ? filteredUsers.length === 0
+                  : filteredDeletedUsers.length === 0
+              }
+              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {isRefreshingCurrentTab ? "Refreshing..." : "Refresh"}
+              CSV report
+            </button>
+
+            <button
+              type="button"
+              onClick={clearUserFilters}
+              className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-rose-500/40 hover:text-rose-300"
+            >
+              Clear
             </button>
           </div>
         </div>
@@ -309,17 +583,16 @@ export function AdminPage() {
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
                 Loading users...
               </div>
-            ) : sortedUsers.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-                No active accounts.
+                No active accounts match your filters.
               </div>
             ) : (
               <>
                 <div className="space-y-4">
                   {paginatedUsers.map((user) => {
                     const displayName =
-                      [user.first_name, user.last_name].filter(Boolean).join(" ") ||
-                      "Not provided";
+                      getUserDisplayName(user) || "Not provided";
 
                     const isEditing = editingUserId === user.id;
 
@@ -435,7 +708,9 @@ export function AdminPage() {
                                   onClick={() => saveUserChanges(user)}
                                   className="rounded-2xl border border-cyan-500/40 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  {savingUserId === user.id ? "Saving..." : "Save changes"}
+                                  {savingUserId === user.id
+                                    ? "Saving..."
+                                    : "Save changes"}
                                 </button>
 
                                 <button
@@ -477,12 +752,14 @@ export function AdminPage() {
                   })}
                 </div>
 
-                {sortedUsers.length > USERS_PAGE_SIZE && (
+                {filteredUsers.length > USERS_PAGE_SIZE && (
                   <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       disabled={usersPage === 1}
-                      onClick={() => setUsersPage((prev) => Math.max(1, prev - 1))}
+                      onClick={() =>
+                        setUsersPage((prev) => Math.max(1, prev - 1))
+                      }
                       className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ←
@@ -536,18 +813,16 @@ export function AdminPage() {
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
                 Loading deleted accounts...
               </div>
-            ) : deletedUsers.length === 0 ? (
+            ) : filteredDeletedUsers.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-                No accounts have been deleted yet.
+                No deleted accounts match your filters.
               </div>
             ) : (
               <>
                 <div className="space-y-4">
                   {paginatedDeletedUsers.map((deleted) => {
                     const displayName =
-                      [deleted.first_name, deleted.last_name]
-                        .filter(Boolean)
-                        .join(" ") || "Unnamed user";
+                      getUserDisplayName(deleted) || "Unnamed user";
 
                     return (
                       <div
@@ -605,12 +880,14 @@ export function AdminPage() {
                   })}
                 </div>
 
-                {deletedUsers.length > USERS_PAGE_SIZE && (
+                {filteredDeletedUsers.length > USERS_PAGE_SIZE && (
                   <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       disabled={deletedPage === 1}
-                      onClick={() => setDeletedPage((prev) => Math.max(1, prev - 1))}
+                      onClick={() =>
+                        setDeletedPage((prev) => Math.max(1, prev - 1))
+                      }
                       className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ←
@@ -661,38 +938,90 @@ export function AdminPage() {
         )}
       </section>
 
-      {/* Deletion history - always visible at the bottom for audit purposes */}
       <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-white">
-              Deletion history
-            </h2>
+        <div className="mb-6 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-white">
+                Deletion history
+              </h2>
 
-            <p className="mt-1 text-sm text-slate-400">
-              {deletedUsers.length === 0
-                ? "No deleted accounts yet."
-                : `${deletedUsers.length} account(s) marked as deleted.`}
-            </p>
+              <p className="mt-1 text-sm text-slate-400">
+                {deletedUsers.length === 0
+                  ? "No deleted accounts yet."
+                  : `${filteredHistory.length} of ${deletedUsers.length} deleted account(s) shown.`}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fetchDeletedUsers()}
+              disabled={loadingDeleted}
+              className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingDeleted ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => fetchDeletedUsers()}
-            disabled={loadingDeleted}
-            className="inline-flex w-fit rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-cyan-400 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loadingDeleted ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <input
+              value={historySearch}
+              onChange={(e) => {
+                setHistorySearch(e.target.value);
+                setHistoryPage(1);
+              }}
+              placeholder="Search by name, email, user ID, role, source"
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 xl:w-96"
+            />
+
+            <input
+              type="datetime-local"
+              value={historyStartDate}
+              onChange={(e) => {
+                setHistoryStartDate(e.target.value);
+                setHistoryPage(1);
+              }}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+            />
+
+            <input
+              type="datetime-local"
+              value={historyEndDate}
+              onChange={(e) => {
+                setHistoryEndDate(e.target.value);
+                setHistoryPage(1);
+              }}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="w-full cursor-pointer rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400 xl:w-60"
+            />
+
+            <button
+              type="button"
+              onClick={exportDeletionHistoryCsv}
+              disabled={filteredHistory.length === 0}
+              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              CSV report
+            </button>
+
+            <button
+              type="button"
+              onClick={clearHistoryFilters}
+              className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:border-rose-500/40 hover:text-rose-300"
+            >
+              Clear
+            </button>
+          </div>
         </div>
 
         {loadingDeleted ? (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
             Loading deletion history...
           </div>
-        ) : deletedUsers.length === 0 ? (
+        ) : filteredHistory.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-400">
-            No accounts have been deleted yet.
+            No deletion history entries match your filters.
           </div>
         ) : (
           <>
@@ -711,9 +1040,7 @@ export function AdminPage() {
                 <tbody className="divide-y divide-slate-800">
                   {paginatedHistory.map((deleted) => {
                     const displayName =
-                      [deleted.first_name, deleted.last_name]
-                        .filter(Boolean)
-                        .join(" ") || "Unnamed user";
+                      getUserDisplayName(deleted) || "Unnamed user";
 
                     return (
                       <tr key={deleted.id} className="bg-slate-950/20">
@@ -763,12 +1090,14 @@ export function AdminPage() {
               </table>
             </div>
 
-            {deletedUsers.length > USERS_PAGE_SIZE && (
+            {filteredHistory.length > USERS_PAGE_SIZE && (
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
                   disabled={historyPage === 1}
-                  onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() =>
+                    setHistoryPage((prev) => Math.max(1, prev - 1))
+                  }
                   className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ←
@@ -827,18 +1156,14 @@ export function AdminPage() {
 
               <p className="mt-3 text-sm leading-relaxed text-slate-400">
                 This user will be deactivated and hidden from active operations.
-                The account data will remain stored for audit and recovery purposes.
+                The account data will remain stored for audit and recovery
+                purposes.
               </p>
             </div>
 
             <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
               <p className="text-sm font-semibold text-white">
-                {[
-                  userPendingDelete.first_name,
-                  userPendingDelete.last_name,
-                ]
-                  .filter(Boolean)
-                  .join(" ") || "Unnamed user"}
+                {getUserDisplayName(userPendingDelete) || "Unnamed user"}
               </p>
 
               <p className="mt-1 text-sm text-slate-400">
