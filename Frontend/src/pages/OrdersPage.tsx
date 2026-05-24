@@ -737,7 +737,11 @@ export default function OrdersPage() {
 
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300">
-                                  User ID #{event.actor_user_id ?? "-"}
+                                  {event.actor_user_id
+                                    ? event.actor_display_name
+                                      ? `${event.actor_display_name} · User ID #${event.actor_user_id}`
+                                      : `User ID #${event.actor_user_id}`
+                                    : "Unknown user"}
                                 </span>
 
                                 <span

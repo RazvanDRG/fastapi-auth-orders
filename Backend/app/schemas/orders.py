@@ -50,6 +50,7 @@ class OrderEventOut(BaseModel):
     from_status: str | None = None
     to_status: str | None = None
     actor_user_id: int | None = None
+    actor_display_name: str | None = None
     actor_role: str | None = None
     request_id: str | None = None
     created_at: datetime

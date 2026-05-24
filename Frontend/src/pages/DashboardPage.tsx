@@ -121,20 +121,28 @@ function getActivityAccent(description: string) {
   };
 }
 
-function getActorLabel(role?: string | null, id?: number | null) {
+
+function getActorLabel(
+  role?: string | null,
+  id?: number | null,
+  displayName?: string | null
+) {
   if (!id) return "Unknown";
 
-  switch ((role || "").toLowerCase()) {
-    case "admin":
-      return `Admin ID #${id}`;
-    case "operator":
-      return `Operator ID #${id}`;
-    case "service":
-      return `Service ID #${id}`;
-    default:
-      return `User ID #${id}`;
-  }
+  const prefix =
+    (role || "").toLowerCase() === "admin"
+      ? "Admin"
+      : (role || "").toLowerCase() === "operator"
+        ? "Operator"
+        : (role || "").toLowerCase() === "service"
+          ? "Service"
+          : "User";
+
+  return displayName
+    ? `${displayName} · ${prefix} ID #${id}`
+    : `${prefix} ID #${id}`;
 }
+
 
 function getEventSearchText(activity: ActivityFeedItem) {
   return [
@@ -908,7 +916,8 @@ export function DashboardPage() {
                                 <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300">
                                   {getActorLabel(
                                     event.actor_role,
-                                    event.actor_user_id
+                                    event.actor_user_id,
+                                    event.actor_display_name
                                   )}
                                 </span>
 
@@ -984,7 +993,8 @@ export function DashboardPage() {
                             <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">
                               {getActorLabel(
                                 activity.actor_role,
-                                activity.actor_user_id
+                                activity.actor_user_id,
+                                activity.actor_display_name
                               )}
                             </span>
 
