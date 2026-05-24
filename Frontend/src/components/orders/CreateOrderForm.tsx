@@ -17,6 +17,24 @@ type CreateOrderFormProps = {
   refreshKey?: number;
 };
 
+const PRODUCTS_PAGE_SIZE = 8;
+
+function getPaginationItems(current: number, total: number) {
+  if (total <= 6) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  const items: (number | string)[] = [1, 2];
+
+  if (current > 4) items.push("...");
+  if (current > 3 && current < total - 2) items.push(current);
+  if (current < total - 3) items.push("...");
+
+  items.push(total - 1, total);
+
+  return [...new Set(items)];
+}
+
 export default function CreateOrderForm({
   onCreated,
   refreshKey = 0,
@@ -28,6 +46,7 @@ export default function CreateOrderForm({
   >({});
   const [reference, setReference] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [productsPage, setProductsPage] = useState(1);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -58,6 +77,22 @@ export default function CreateOrderForm({
       );
     });
   }, [products, searchTerm]);
+
+  const totalProductPages = Math.max(
+    1,
+    Math.ceil(filteredProducts.length / PRODUCTS_PAGE_SIZE)
+  );
+
+  const paginatedProducts = filteredProducts.slice(
+    (productsPage - 1) * PRODUCTS_PAGE_SIZE,
+    productsPage * PRODUCTS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    if (productsPage > totalProductPages) {
+      setProductsPage(totalProductPages);
+    }
+  }, [productsPage, totalProductPages]);
 
   async function fetchProducts() {
     try {
@@ -234,7 +269,10 @@ export default function CreateOrderForm({
 
       <input
         value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          setProductsPage(1);
+        }}
         placeholder="Search by product name, SKU, or ID"
         className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
       />
@@ -248,8 +286,9 @@ export default function CreateOrderForm({
           No products match your search.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {filteredProducts.map((product) => {
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {paginatedProducts.map((product) => {
             const selectedQty = getSelectedQty(product);
             const isOutOfStock = product.stock_qty <= 0;
 
@@ -345,8 +384,60 @@ export default function CreateOrderForm({
                 </button>
               </div>
             );
-          })}
-        </div>
+            })}
+          </div>
+
+          {filteredProducts.length > PRODUCTS_PAGE_SIZE && (
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                disabled={productsPage === 1}
+                onClick={() => setProductsPage((prev) => Math.max(1, prev - 1))}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ←
+              </button>
+
+              {getPaginationItems(productsPage, totalProductPages).map(
+                (item, index) =>
+                  item === "..." ? (
+                    <span
+                      key={`ellipsis-products-${index}`}
+                      className="px-2 text-slate-500"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={`products-${item}`}
+                      type="button"
+                      onClick={() => setProductsPage(Number(item))}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        productsPage === item
+                          ? "border-cyan-400 bg-cyan-400/15 text-cyan-300"
+                          : "border-slate-700 bg-slate-950 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-200"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  )
+              )}
+
+              <button
+                type="button"
+                disabled={productsPage === totalProductPages}
+                onClick={() =>
+                  setProductsPage((prev) =>
+                    Math.min(totalProductPages, prev + 1)
+                  )
+                }
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                →
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-5">
