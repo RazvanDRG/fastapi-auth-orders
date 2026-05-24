@@ -271,6 +271,60 @@ function exportInventoryHistoryCsv() {
   URL.revokeObjectURL(url);
 }
 
+function exportInventoryStockCsv() {
+  const headers = [
+    "product_id",
+    "sku",
+    "name",
+    "stock_qty",
+    "stock_status",
+  ];
+
+  const escapeCsv = (value: string | number | null | undefined) => {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const getStockStatus = (stock: number) => {
+    if (stock <= 0) return "out_of_stock";
+    if (stock <= 10) return "low_stock";
+    return "healthy";
+  };
+
+  const rows = filteredProducts.map((product) =>
+    [
+      product.id,
+      product.sku,
+      product.name,
+      product.stock_qty,
+      getStockStatus(product.stock_qty),
+    ].map(escapeCsv)
+  );
+
+  const csv = [headers.map(escapeCsv), ...rows]
+    .map((row) => row.join(","))
+    .join("\n");
+
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `inventory-stock-${new Date()
+    .toISOString()
+    .slice(0, 19)
+    .replace(/:/g, "-")}.csv`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
   return (
     <div className="space-y-6">
       <div>
@@ -360,6 +414,15 @@ function exportInventoryHistoryCsv() {
               placeholder="Search by name, SKU, or ID"
               className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400 sm:w-72"
             />
+
+            <button
+              type="button"
+              onClick={exportInventoryStockCsv}
+              disabled={filteredProducts.length === 0}
+              className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              CSV report
+            </button>
 
             <button
               type="button"
