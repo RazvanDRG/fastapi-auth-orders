@@ -187,12 +187,62 @@ def get_order_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return (
+    events = (
         db.query(OrderEvent)
         .filter(OrderEvent.order_id == order_id)
         .order_by(OrderEvent.created_at.desc())
         .all()
     )
+
+    actor_ids = {
+        event.actor_user_id
+        for event in events
+        if event.actor_user_id is not None
+    }
+
+    users = (
+        db.query(User)
+        .filter(User.id.in_(actor_ids))
+        .all()
+        if actor_ids
+        else []
+    )
+
+    users_by_id = {user.id: user for user in users}
+
+    result = []
+
+    for event in events:
+        actor = users_by_id.get(event.actor_user_id)
+
+        actor_display_name = None
+
+        if actor:
+            actor_display_name = (
+                " ".join(
+                    part
+                    for part in [actor.first_name, actor.last_name]
+                    if part
+                )
+                or actor.email
+            )
+
+        result.append(
+            OrderEventOut(
+                id=event.id,
+                order_id=event.order_id,
+                action=event.action,
+                from_status=event.from_status,
+                to_status=event.to_status,
+                actor_user_id=event.actor_user_id,
+                actor_display_name=actor_display_name,
+                actor_role=event.actor_role,
+                request_id=event.request_id,
+                created_at=event.created_at,
+            )
+        )
+
+    return result
 
 
 @router.post("/{order_id}/reserve", response_model=OrderOut, summary="Reserve stock")

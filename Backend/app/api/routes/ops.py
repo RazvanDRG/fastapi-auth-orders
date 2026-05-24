@@ -67,7 +67,42 @@ def recent_activity(
             )
             .scalars()
             .all()
+                )
+
+        actor_ids = {
+            event.actor_user_id
+            for event in [*order_events, *admin_events]
+            if event.actor_user_id is not None
+        }
+
+        users = (
+            db.query(User)
+            .filter(User.id.in_(actor_ids))
+            .all()
+            if actor_ids
+            else []
         )
+
+        users_by_id = {user.id: user for user in users}
+
+
+        def get_actor_display_name(actor_user_id: int | None) -> str | None:
+            if actor_user_id is None:
+                return None
+
+            actor = users_by_id.get(actor_user_id)
+
+            if not actor:
+                return None
+
+            return (
+                " ".join(
+                    part
+                    for part in [actor.first_name, actor.last_name]
+                    if part
+                )
+                or actor.email
+            )
 
         activities = []
 
@@ -85,6 +120,7 @@ def recent_activity(
                         )
                     ),
                     "actor_user_id": event.actor_user_id,
+                    "actor_display_name": get_actor_display_name(event.actor_user_id),
                     "actor_role": event.actor_role,
                     "created_at": event.created_at,
                 }
@@ -104,6 +140,7 @@ def recent_activity(
                         )
                     ),
                     "actor_user_id": event.actor_user_id,
+                    "actor_display_name": get_actor_display_name(event.actor_user_id),
                     "actor_role": None,
                     "created_at": event.created_at,
                 }

@@ -94,6 +94,7 @@ export interface ActivityFeedItem {
   title: string;
   description: string;
   actor_user_id: number | null;
+  actor_display_name: string | null;
   actor_role: string | null;
   created_at: string;
 }
@@ -105,6 +106,7 @@ export interface OrderEvent {
   from_status: string | null;
   to_status: string | null;
   actor_user_id: number | null;
+  actor_display_name: string | null;
   actor_role: string | null;
   request_id: string | null;
   created_at: string;
