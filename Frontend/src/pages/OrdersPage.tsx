@@ -212,12 +212,22 @@ export default function OrdersPage() {
   }, [ordersPage, totalOrderPages]);
 
   useSSE((event) => {
-    if (event.type === "order_update") {
-      fetchMyOrders({ silent: true });
+    switch (event.type) {
+      case "order_update":
+        fetchMyOrders({ silent: true });
 
-      if (selectedOrderIdRef.current) {
-        fetchOrderById(selectedOrderIdRef.current, { silent: true });
-      }
+        if (selectedOrderIdRef.current) {
+          fetchOrderById(selectedOrderIdRef.current, { silent: true });
+          fetchOrderEvents(selectedOrderIdRef.current, { silent: true });
+        }
+
+        setProductsRefreshKey((prev) => prev + 1);
+        break;
+
+      case "inventory_update":
+      case "product_created":
+        setProductsRefreshKey((prev) => prev + 1);
+        break;
     }
   });
 
@@ -365,7 +375,7 @@ export default function OrdersPage() {
         fetchOrderById(selectedOrderIdRef.current, { silent: true });
         fetchOrderEvents(selectedOrderIdRef.current, { silent: true });
       }
-    }, 10000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [showArchived]);
