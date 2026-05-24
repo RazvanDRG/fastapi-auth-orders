@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.password_reset_code import PasswordResetCode
 from app.models.refresh_token import RefreshToken
-from app.services.auth import hash_reset_code
+from app.services.auth import hash_reset_code, hash_password
 from app.models.user_admin_event import UserAdminEvent
 
 
@@ -21,10 +21,10 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 CUSTOMER_ID = int(os.getenv("TEST_CUSTOMER_ID", "1"))
 
 OP_EMAIL = os.getenv("TEST_OPERATOR_EMAIL", "op_test@example.com")
-OP_PASS = os.getenv("TEST_OPERATOR_PASS", "pass1234")
+OP_PASS = os.getenv("TEST_OPERATOR_PASS", "Pass1234!")
 
 SVC_EMAIL = os.getenv("TEST_SERVICE_EMAIL", "svc_test@example.com")
-SVC_PASS = os.getenv("TEST_SERVICE_PASS", "pass1234")
+SVC_PASS = os.getenv("TEST_SERVICE_PASS", "Pass1234!")
 
 
 def wait_api():
@@ -43,6 +43,7 @@ def register(email: str, password: str, first_name: str = "Test", last_name: str
     payload = {
         "email": email,
         "password": password,
+        "confirm_password": password,
         "first_name": first_name,
         "last_name": last_name,
     }
@@ -63,12 +64,17 @@ def register(email: str, password: str, first_name: str = "Test", last_name: str
     raise AssertionError(f"register failed: {r.status_code} {r.text}")
 
 
-def set_user_role(email: str, role: str):
+def set_user_role(email: str, role: str, password: str | None = None):
     db = SessionLocal()
     try:
         user = db.scalar(select(User).where(User.email == email))
         assert user is not None, f"user not found in DB after register: {email}"
         user.role = role
+        user.is_deleted = False
+
+        if password is not None:
+            user.hashed_password = hash_password(password)
+
         db.commit()
     finally:
         db.close()
@@ -76,7 +82,7 @@ def set_user_role(email: str, role: str):
 
 def ensure_user_with_role(email: str, password: str, role: str):
     register(email, password)
-    set_user_role(email, role)
+    set_user_role(email, role, password=password)
 
 
 def ensure_test_product(required_qty: int = 100) -> int:
@@ -251,7 +257,7 @@ def test_soft_deleted_user_cannot_login():
     wait_api()
 
     email = f"deleted_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
 
@@ -264,7 +270,7 @@ def test_soft_deleted_user_cannot_login():
         db.close()
 
     admin_email = f"admin_{uuid.uuid4().hex[:6]}@example.com"
-    admin_pass = "pass1234"
+    admin_pass = "Pass1234!"
 
     ensure_user_with_role(admin_email, admin_pass, Roles.ADMIN)
     admin_token = login_access_token(admin_email, admin_pass)
@@ -288,7 +294,7 @@ def test_cannot_delete_last_active_admin():
     wait_api()
 
     email = f"lastadmin_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.ADMIN)
     token = login_access_token(email, password)
@@ -326,13 +332,14 @@ def test_register_with_optional_first_and_last_name():
     wait_api()
 
     email = f"name_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     r = httpx.post(
         f"{BASE_URL}/auth/register",
         json={
             "email": email,
             "password": password,
+            "confirm_password": password,
             "first_name": "John",
             "last_name": "Doe",
         },
@@ -353,7 +360,7 @@ def test_forgot_password_returns_generic_response_for_existing_and_unknown_email
     wait_api()
 
     email = f"forgot_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
     ensure_user_with_role(email, password, Roles.OPERATOR)
 
     r1 = httpx.post(
@@ -377,7 +384,7 @@ def test_forgot_password_creates_reset_code_for_existing_user():
     wait_api()
 
     email = f"forgotdb_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
     ensure_user_with_role(email, password, Roles.OPERATOR)
 
     r = httpx.post(
@@ -408,8 +415,8 @@ def test_reset_password_with_valid_code_revokes_old_refresh_tokens():
     wait_api()
 
     email = f"resetok_{uuid.uuid4().hex[:6]}@example.com"
-    old_password = "pass1234"
-    new_password = "newpass1234"
+    old_password = "Pass1234!"
+    new_password = "Newpass1234!"
 
     ensure_user_with_role(email, old_password, Roles.OPERATOR)
 
@@ -469,7 +476,7 @@ def test_reset_password_fails_with_wrong_code_and_increments_attempt_count():
     wait_api()
 
     email = f"resetbad_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
     create_password_reset_code(email=email, code="123456", expires_minutes=10)
@@ -479,8 +486,8 @@ def test_reset_password_fails_with_wrong_code_and_increments_attempt_count():
         json={
             "email": email,
             "code": "999999",
-            "new_password": "newpass1234",
-            "confirm_password": "newpass1234",
+            "new_password": "Newpass1234!",
+            "confirm_password": "Newpass1234!",
         },
         timeout=10,
     )
@@ -510,7 +517,7 @@ def test_reset_password_fails_when_passwords_do_not_match():
     wait_api()
 
     email = f"resetmismatch_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
     create_password_reset_code(email=email, code="123456", expires_minutes=10)
@@ -520,8 +527,8 @@ def test_reset_password_fails_when_passwords_do_not_match():
         json={
             "email": email,
             "code": "123456",
-            "new_password": "newpass1234",
-            "confirm_password": "different1234",
+            "new_password": "Newpass1234!",
+            "confirm_password": "Different1234!",
         },
         timeout=10,
     )
@@ -533,7 +540,7 @@ def test_reset_password_fails_with_expired_code():
     wait_api()
 
     email = f"resetexpired_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
     create_password_reset_code(email=email, code="123456", expires_minutes=-1)
@@ -543,8 +550,8 @@ def test_reset_password_fails_with_expired_code():
         json={
             "email": email,
             "code": "123456",
-            "new_password": "newpass1234",
-            "confirm_password": "newpass1234",
+            "new_password": "Newpass1234!",
+            "confirm_password": "Newpass1234!",
         },
         timeout=10,
     )
@@ -556,7 +563,7 @@ def test_reset_password_fails_if_new_password_matches_current_password():
     wait_api()
 
     email = f"resetsame_{uuid.uuid4().hex[:6]}@example.com"
-    password = "pass1234"
+    password = "Pass1234!"
 
     ensure_user_with_role(email, password, Roles.OPERATOR)
     create_password_reset_code(email=email, code="123456", expires_minutes=10)
@@ -579,11 +586,11 @@ def test_update_user_role_creates_admin_audit_event():
     wait_api()
 
     target_email = f"userrole_{uuid.uuid4().hex[:6]}@example.com"
-    target_password = "pass1234"
+    target_password = "Pass1234!"
     ensure_user_with_role(target_email, target_password, Roles.OPERATOR)
 
     admin_email = f"adminrole_{uuid.uuid4().hex[:6]}@example.com"
-    admin_password = "pass1234"
+    admin_password = "Pass1234!"
     ensure_user_with_role(admin_email, admin_password, Roles.ADMIN)
     admin_token = login_access_token(admin_email, admin_password)
 
@@ -629,11 +636,11 @@ def test_soft_delete_user_creates_admin_audit_event():
     wait_api()
 
     target_email = f"userdel_{uuid.uuid4().hex[:6]}@example.com"
-    target_password = "pass1234"
+    target_password = "Pass1234!"
     ensure_user_with_role(target_email, target_password, Roles.OPERATOR)
 
     admin_email = f"admindel_{uuid.uuid4().hex[:6]}@example.com"
-    admin_password = "pass1234"
+    admin_password = "Pass1234!"
     ensure_user_with_role(admin_email, admin_password, Roles.ADMIN)
     admin_token = login_access_token(admin_email, admin_password)
 
