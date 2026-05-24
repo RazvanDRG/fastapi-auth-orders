@@ -18,7 +18,12 @@ function getPasswordChecks(password: string) {
 
 function getPasswordStrength(password: string) {
   const checks = getPasswordChecks(password);
-  const passed = Object.values(checks).filter(Boolean).length;
+
+  const isValid =
+    checks.minLength &&
+    checks.maxLength &&
+    checks.uppercase &&
+    checks.special;
 
   if (!password) {
     return {
@@ -29,26 +34,17 @@ function getPasswordStrength(password: string) {
     };
   }
 
-  if (passed <= 2) {
+  if (!isValid) {
     return {
-      label: "Weak",
+      label: "Invalid",
       tone: "text-rose-300",
       barClass: "bg-rose-400",
-      widthClass: "w-1/3",
-    };
-  }
-
-  if (passed === 3) {
-    return {
-      label: "Medium",
-      tone: "text-amber-300",
-      barClass: "bg-amber-400",
-      widthClass: "w-2/3",
+      widthClass: "w-1/2",
     };
   }
 
   return {
-    label: "Strong",
+    label: "Valid",
     tone: "text-emerald-300",
     barClass: "bg-emerald-400",
     widthClass: "w-full",
@@ -63,13 +59,38 @@ export function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
 
   const passwordChecks = useMemo(() => getPasswordChecks(password), [password]);
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+
+  const NAME_REGEX = /^[A-Za-z]+$/;
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const PASSWORD_UPPERCASE_REGEX = /[A-Z]/;
+  const PASSWORD_SPECIAL_CHAR_REGEX = /[^A-Za-z0-9]/;
+  const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/;
+
+  const isFirstNameValid = NAME_REGEX.test(firstName.trim());
+  const isLastNameValid = NAME_REGEX.test(lastName.trim());
+  const isPasswordValid =
+    password.length >= 8 &&
+    password.length <= 64 &&
+    PASSWORD_UPPERCASE_REGEX.test(password) &&
+    PASSWORD_SPECIAL_CHAR_REGEX.test(password);
+
+  const doPasswordsMatch = password === confirmPassword && confirmPassword.length > 0;
+
+  const isFormValid =
+    isFirstNameValid &&
+    isLastNameValid &&
+    email.trim().length > 0 &&
+    isPasswordValid &&
+    doPasswordsMatch;
 
   function ruleClass(valid: boolean) {
     return valid ? "text-emerald-300" : "text-slate-500";
@@ -83,8 +104,37 @@ export function RegisterPage() {
     e.preventDefault();
     setFormError("");
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+
+    if (!cleanEmail) {
       setFormError("Email is required.");
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      setFormError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!cleanFirstName) {
+      setFormError("First name is required.");
+      return;
+    }
+
+    if (!NAME_REGEX.test(cleanFirstName)) {
+      setFormError("First name must contain only A-Z and a-z letters.");
+      return;
+    }
+
+    if (!cleanLastName) {
+      setFormError("Last name is required.");
+      return;
+    }
+
+    if (!NAME_REGEX.test(cleanLastName)) {
+      setFormError("Last name must contain only A-Z and a-z letters.");
       return;
     }
 
@@ -95,13 +145,13 @@ export function RegisterPage() {
       return;
     }
 
-    if (!firstName.trim()) {
-      setFormError("First name is required.");
+    if (!confirmPassword) {
+      setFormError("Confirm password is required.");
       return;
     }
 
-    if (!lastName.trim()) {
-      setFormError("Last name is required.");
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match.");
       return;
     }
 
@@ -109,18 +159,20 @@ export function RegisterPage() {
       setLoading(true);
 
       await register({
-        email: email.trim(),
+        email: cleanEmail,
         password,
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
+        confirm_password: confirmPassword,
+        first_name: cleanFirstName,
+        last_name: cleanLastName,
       });
 
-      toast.success("Account created successfully.");
-      setTimeout(() => navigate("/login"), 1000);
-    } catch (err: unknown) {
-      toast.error(
-        getErrorMessage(err, "Registration failed. Please verify the input and try again.")
-      );
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail ||
+        "Could not create account.";
+
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -176,7 +228,6 @@ export function RegisterPage() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-200">
                       First name
@@ -185,7 +236,7 @@ export function RegisterPage() {
                       type="text"
                       autoComplete="given-name"
                       value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      onChange={(e) => setFirstName(e.target.value.replace(/[^A-Za-z]/g, ""))}
                       placeholder="John"
                       className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                     />
@@ -199,7 +250,7 @@ export function RegisterPage() {
                       type="text"
                       autoComplete="family-name"
                       value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
+                      onChange={(e) => setLastName(e.target.value.replace(/[^A-Za-z]/g, ""))}
                       placeholder="Doe"
                       className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                     />
@@ -211,6 +262,7 @@ export function RegisterPage() {
                   </label>
                   <input
                     type="email"
+                    inputMode="email"
                     autoFocus
                     autoComplete="email"
                     value={email}
@@ -234,7 +286,7 @@ export function RegisterPage() {
                       onKeyUp={handlePasswordKeyEvent}
                       onKeyDown={handlePasswordKeyEvent}
                       placeholder="Min 8 chars, 1 uppercase, 1 special char"
-                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-24 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-20 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
                     />
 
                     <button
@@ -246,6 +298,31 @@ export function RegisterPage() {
                     </button>
                   </div>
 
+                  <div className="mt-4">
+                    <label className="mb-2 block text-sm font-medium text-slate-200">
+                      Confirm password
+                    </label>
+
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm your password"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 pr-20 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((value) => !value)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl px-3 py-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-cyan-300"
+                      >
+                        {showConfirmPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+
                   {capsLockOn && (
                     <p className="mt-2 text-xs text-amber-300">
                       Caps Lock is on.
@@ -255,7 +332,7 @@ export function RegisterPage() {
                   <div className="mt-3">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-slate-400">
-                        Password strength
+                        Password requirements
                       </span>
                       <span className={`text-xs font-semibold ${passwordStrength.tone}`}>
                         {passwordStrength.label}

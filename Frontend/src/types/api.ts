@@ -3,12 +3,13 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
+export type RegisterRequest = {
   email: string;
   password: string;
+  confirm_password: string;
   first_name: string;
   last_name: string;
-}
+};
 
 export interface ForgotPasswordRequest {
   email: string;
