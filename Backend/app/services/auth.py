@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -20,6 +21,11 @@ from app.services.refresh_tokens import (
     revoke_refresh_token,
     revoke_all_refresh_tokens_for_user
 )
+
+
+PASSWORD_UPPERCASE_REGEX = re.compile(r"[A-Z]")
+PASSWORD_SPECIAL_CHAR_REGEX = re.compile(r"[^A-Za-z0-9]")
+NAME_REGEX = re.compile(r"^[A-Za-z]+$")
 
 
 def hash_password(password: str) -> str:
@@ -92,11 +98,10 @@ def reset_password_with_code(
     new_password: str,
     confirm_password: str,
 ) -> None:
-    new_password = new_password.strip()
-    confirm_password = confirm_password.strip()
-
     if new_password != confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    validate_password_policy(new_password)
 
     user = db.scalar(select(User).where(User.email == email))
     if not user or user.is_deleted:
@@ -143,41 +148,49 @@ def register_user(
     db: Session,
     email: str,
     password: str,
+    confirm_password: str,
     first_name: str | None = None,
     last_name: str | None = None,
 ) -> dict:
-    existing = db.scalar(select(User).where(User.email == email))
+    clean_email = email.strip().lower()
+
+    if password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    validate_password_policy(password)
+
+    clean_first_name = validate_name(first_name, "First name")
+    clean_last_name = validate_name(last_name, "Last name")
+
+    existing = db.scalar(select(User).where(User.email == clean_email))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    clean_password = password.strip()
-    clean_first_name = first_name.strip() if first_name else None
-    clean_last_name = last_name.strip() if last_name else None
-
     user = User(
-        email=email,
-        hashed_password=hash_password(clean_password),
+        email=clean_email,
+        hashed_password=hash_password(password),
         role=Roles.OPERATOR,
         first_name=clean_first_name,
         last_name=clean_last_name,
     )
 
     db.add(user)
+
     try:
         db.commit()
         db.refresh(user)
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not register user")
 
     return {"message": "registered"}
 
 
 def login_user(db: Session, email: str, password: str) -> TokenResponse:
-    user = db.scalar(select(User).where(User.email == email))
+    clean_email = email.strip().lower()
+    user = db.scalar(select(User).where(User.email == clean_email))
 
-    clean_password = password.strip()
-    if not user or user.is_deleted or not verify_password(clean_password, user.hashed_password):
+    if not user or user.is_deleted or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -247,3 +260,49 @@ def logout_user(db: Session, refresh_token: str) -> dict:
     revoke_refresh_token(db, refresh_token)
     db.commit()
     return {"message": "logged out"}
+
+def validate_password_policy(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters",
+        )
+
+    if len(password) > 64:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at most 64 characters",
+        )
+
+    if not PASSWORD_UPPERCASE_REGEX.search(password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least 1 uppercase letter",
+        )
+
+    if not PASSWORD_SPECIAL_CHAR_REGEX.search(password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least 1 special character",
+        )
+
+
+def validate_name(value: str | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+
+    clean_value = value.strip()
+
+    if not clean_value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} is required",
+        )
+
+    if not NAME_REGEX.fullmatch(clean_value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} must contain only A-Z and a-z letters",
+        )
+
+    return clean_value

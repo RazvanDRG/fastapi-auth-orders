@@ -3,7 +3,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.roles import Roles
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.user import User
@@ -20,12 +19,13 @@ from app.schemas.auth import (
     DeleteAccountRequest,
 )
 from app.services.auth import (
-    hash_password,
     verify_password,
     create_access_token,
     issue_password_reset_code,
     reset_password_with_code,
+    register_user,
 )
+
 from app.services.email import send_password_reset_code
 from app.services.refresh_tokens import (
     issue_refresh_token,
@@ -39,40 +39,22 @@ router = APIRouter(prefix="/auth", tags=["Login"])
 
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    existing = db.scalar(select(User).where(User.email == payload.email))
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    password = payload.password.strip()
-
-    first_name = payload.first_name.strip() if payload.first_name else None
-    last_name = payload.last_name.strip() if payload.last_name else None
-
-    user = User(
+    return register_user(
+        db=db,
         email=payload.email,
-        hashed_password=hash_password(password),
-        role=Roles.OPERATOR,
-        first_name=first_name,
-        last_name=last_name,
+        password=payload.password,
+        confirm_password=payload.confirm_password,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
     )
-
-    db.add(user)
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=repr(e))
-
-    return {"message": "registered"}
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == payload.email))
+    email = payload.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == email))
 
-    password = payload.password.strip()
-    if not user or user.is_deleted or not verify_password(password, user.hashed_password):
+    if not user or user.is_deleted or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
