@@ -143,6 +143,7 @@ export default function CreateOrderForm({
     fetchProducts();
   }, [refreshKey]);
 
+
   function clampQty(qty: number, max: number) {
     if (!Number.isFinite(qty)) return 1;
     return Math.max(1, Math.min(qty, max));
