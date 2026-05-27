@@ -30,6 +30,6 @@ class Settings(BaseSettings):
     delete_account_lock_minutes: int = 15
     
 
-model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

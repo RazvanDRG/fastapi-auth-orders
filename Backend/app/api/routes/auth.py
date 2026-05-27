@@ -77,16 +77,31 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     if not user or user.is_deleted:
         return generic_response
 
-    code = issue_password_reset_code(db, user_id=user.id)
-    send_password_reset_code(
-        email=user.email,
-        code=code,
-        ttl_minutes=settings.password_reset_code_ttl_minutes,
-    )
-    db.commit()
+    try:
+        code = issue_password_reset_code(db, user_id=user.id)
+        db.commit()  # ← salvezi codul ÎNAINTE de email
 
-    return generic_response
+        try:
+            send_password_reset_code(
+                email=user.email,
+                code=code,
+                ttl_minutes=settings.password_reset_code_ttl_minutes,
+            )
+        except Exception as e:
+            print(f"SMTP ERROR: {repr(e)}", flush=True)
+            import logging
+            logging.error(f"Failed to send reset email to {user.email}: {e}")
 
+        return generic_response
+
+    except Exception as exc:
+        db.rollback()
+        print("FORGOT_PASSWORD_ERROR:", repr(exc), flush=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not send password reset email"
+        )
+        
 
 @router.post("/reset-password", response_model=MessageResponse)
 def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
@@ -165,3 +180,12 @@ def delete_my_account(
     db: Session = Depends(get_db),
 ):
     return self_delete_account(db, current_user, password=payload.password)
+
+@router.get("/test-email")
+def test_email():
+    from app.services.email import send_password_reset_code
+    try:
+        send_password_reset_code("razvan.dornea1@gmail.com", "123456", 10)
+        return {"status": "sent"}
+    except Exception as e:
+        return {"status": "error", "detail": repr(e)}
