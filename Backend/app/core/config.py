@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     smtp_password: str
     smtp_from_email: str
     smtp_from_name: str = "Warehouse Operations Service"
+    resend_api_key: str
 
     # Reset password settings
     password_reset_code_ttl_minutes: int = 10
