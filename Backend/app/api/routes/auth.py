@@ -72,8 +72,13 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     generic_response = MessageResponse(
         message="If the account exists, a reset code was sent."
     )
-
+    
+    print(f"[FORGOT] Looking up email: {payload.email}", flush=True)
+    
     user = db.scalar(select(User).where(User.email == payload.email))
+    
+    print(f"[FORGOT] User found: {user}, is_deleted: {getattr(user, 'is_deleted', 'N/A')}", flush=True)
+    
     if not user or user.is_deleted:
         return generic_response
 
