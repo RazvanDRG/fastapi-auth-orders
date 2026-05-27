@@ -79,7 +79,17 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 
     try:
         code = issue_password_reset_code(db, user_id=user.id)
-        db.commit()  # ← salvezi codul ÎNAINTE de email
+        db.commit()
+
+        try:
+            print(f"[FORGOT] Sending email to {user.email}, api_key set: {bool(settings.resend_api_key)}", flush=True)  # ← aici
+            send_password_reset_code(
+                email=user.email,
+                code=code,
+                ttl_minutes=settings.password_reset_code_ttl_minutes,
+            )
+        except Exception as e:
+            print(f"SMTP ERROR: {repr(e)}", flush=True)
 
         try:
             send_password_reset_code(
@@ -88,7 +98,6 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
                 ttl_minutes=settings.password_reset_code_ttl_minutes,
             )
         except Exception as e:
-            print(f"SMTP ERROR: {repr(e)}", flush=True)
             import logging
             logging.error(f"Failed to send reset email to {user.email}: {e}")
 
