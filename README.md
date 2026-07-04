@@ -297,3 +297,13 @@ GitHub Actions runs automatically on push and pull request:
 - Rate limiting on auth endpoints
 - WebSocket / SSE for real-time dashboard updates
 - Email notifications for order state transitions
+
+---
+
+## 👤 About
+
+Built solo by **Razvan-Gabriel Dornea** — Backend Developer (Python/FastAPI), 
+also built the React frontend end-to-end for this project.
+
+- LinkedIn: [linkedin.com/in/razvan-gabriel-dornea-697579184](https://www.linkedin.com/in/razvan-gabriel-dornea-697579184/)
+- GitHub: [@RazvanDRG](https://github.com/RazvanDRG)
