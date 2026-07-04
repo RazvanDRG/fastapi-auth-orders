@@ -52,6 +52,8 @@ build/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 
 # logs
 npm-debug.log*
@@ -59,21 +61,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE / editors
-.vscode/
-.idea/
-
 # testing / coverage
 coverage/
 
 # cache
 .cache/
 
-.venv/
 Frontend/node_modules/
-__pycache__/
-.pytest_cache/
