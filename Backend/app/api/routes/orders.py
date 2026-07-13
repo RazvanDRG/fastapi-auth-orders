@@ -107,9 +107,12 @@ def my_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = (
-        db.query(Order)
-        .filter(Order.customer_id == current_user.id)
+    query = db.query(Order).filter(
+        (Order.customer_id == current_user.id)
+        | (Order.assigned_operator_id == current_user.id)
+        # Orders created via integration (source_company set) are visible to
+        # every operator until someone claims them by starting to pick.
+        | ((Order.source_company.isnot(None)) & (Order.assigned_operator_id.is_(None)))
     )
 
     if archived:
@@ -123,6 +126,13 @@ def my_orders(
         .all()
     )
 
+    assigned_ids = {o.assigned_operator_id for o in orders if o.assigned_operator_id}
+    assigned_users_by_id = (
+        {u.id: u for u in db.query(User).filter(User.id.in_(assigned_ids)).all()}
+        if assigned_ids
+        else {}
+    )
+
     for order in orders:
         last_event = (
             db.query(OrderEvent)
@@ -134,6 +144,30 @@ def my_orders(
         order.last_activity_at = (
             last_event.created_at if last_event else None
         )
+
+        assigned_user = assigned_users_by_id.get(order.assigned_operator_id)
+        order.assigned_operator_name = (
+            (" ".join(part for part in [assigned_user.first_name, assigned_user.last_name] if part) or assigned_user.email)
+            if assigned_user
+            else None
+        )
+
+        # Who actually performed the last action: a human operator (event has
+        # actor_user_id) or the integration itself (no human actor -> attribute
+        # to source_company, since only integration orders have one).
+        if last_event and last_event.actor_user_id:
+            actor_user = (
+                assigned_users_by_id.get(last_event.actor_user_id)
+                or db.query(User).filter(User.id == last_event.actor_user_id).first()
+            )
+            order.last_actor_name = (
+                (" ".join(part for part in [actor_user.first_name, actor_user.last_name] if part) or actor_user.email)
+                if actor_user
+                else None
+            )
+        else:
+            order.last_actor_name = order.source_company
+
         items = (
             db.query(OrderItem)
             .filter(OrderItem.order_id == order.id)
@@ -159,6 +193,10 @@ def my_orders(
                 id=order.id,
                 customer_id=order.customer_id,
                 reference=order.reference,
+                source_company=order.source_company,
+                assigned_operator_id=order.assigned_operator_id,
+                assigned_operator_name=order.assigned_operator_name,
+                last_actor_name=order.last_actor_name,
                 status=order.status,
                 items=order.items,
                 last_activity_at=order.last_activity_at,

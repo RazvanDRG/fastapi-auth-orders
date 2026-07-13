@@ -385,6 +385,8 @@ export default function OrdersPage() {
       "order_id",
       "status",
       "reference",
+      "source_company",
+      "assigned_operator",
       "customer_id",
       "last_activity_at",
       "archived_at",
@@ -408,6 +410,8 @@ export default function OrdersPage() {
         order.id,
         order.status,
         order.reference ?? "-",
+        order.source_company ?? "-",
+        order.assigned_operator_name ?? "-",
         order.customer_id,
         order.last_activity_at
           ? new Date(order.last_activity_at).toLocaleString()
@@ -587,6 +591,20 @@ export default function OrdersPage() {
                         {selectedOrder.reference || "-"}
                       </p>
                     </div>
+
+                    {selectedOrder.source_company && (
+                      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Source</p>
+                        <p className="mt-2 text-lg font-semibold text-white">
+                          {selectedOrder.source_company}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {selectedOrder.assigned_operator_id
+                            ? `Claimed by ${selectedOrder.assigned_operator_name ?? "operator"}`
+                            : "Unclaimed - visible to all operators"}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {selectedOrder.archive_due_at && !selectedOrder.archived_at && (
@@ -1001,6 +1019,28 @@ export default function OrdersPage() {
                       {order.reference || "-"}
                     </span>
                   </p>
+
+                  {order.source_company && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-indigo-500/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
+                        {order.source_company}
+                      </span>
+
+                      {order.status === "CANCELLED" || order.status === "SHIPPED" ? (
+                        <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[10px] font-semibold text-slate-300">
+                          {prettyStatus(order.status)} by {order.last_actor_name ?? "unknown"}
+                        </span>
+                      ) : order.assigned_operator_id ? (
+                        <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[10px] font-semibold text-slate-300">
+                          Claimed by {order.assigned_operator_name ?? "operator"}
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-amber-700/50 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                          Unclaimed
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="mt-4 space-y-2">
                     {order.items?.length ? (
