@@ -67,6 +67,10 @@ export interface Order {
   id: number;
   customer_id: number;
   reference?: string | null;
+  source_company?: string | null;
+  assigned_operator_id?: number | null;
+  assigned_operator_name?: string | null;
+  last_actor_name?: string | null;
   status: string;
   archive_due_at?: string | null;
   archived_at?: string | null;

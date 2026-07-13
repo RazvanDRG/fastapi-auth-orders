@@ -24,6 +24,25 @@ class OrderCreate(BaseModel):
     }
     
 
+class ServiceOrderCreate(BaseModel):
+    reference: Optional[str] = Field(None, examples=["S2-SO-1042"])
+    source_company: str = Field(..., examples=["System 2 - RetailCo"])
+    items: List[OrderItemCreate]
+
+    model_config = {
+        "examples": [
+            {
+                "reference": "S2-SO-1042",
+                "source_company": "System 2 - RetailCo",
+                "items": [
+                    {"product_id": 1, "qty": 2},
+                    {"product_id": 2, "qty": 1}
+                ]
+            }
+        ]
+    }
+
+
 class OrderItemOut(BaseModel):
     product_id: int
     qty: int
@@ -36,6 +55,10 @@ class OrderOut(BaseModel):
     id: int
     customer_id: int
     reference: Optional[str]
+    source_company: str | None = None
+    assigned_operator_id: int | None = None
+    assigned_operator_name: str | None = None
+    last_actor_name: str | None = None
     status: OrderStatus
     items: list[OrderItemOut] = []
     last_activity_at: datetime | None = None

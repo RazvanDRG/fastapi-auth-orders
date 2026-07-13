@@ -23,6 +23,17 @@ from app.api.routes.products import router as products_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.sse import router as sse_router
 
+from prometheus_fastapi_instrumentator import routing as _pfi_routing
+
+_original_get_route_name = _pfi_routing._get_route_name
+
+def _patched_get_route_name(scope, routes):
+    from starlette.routing import Route
+    filtered = [r for r in routes if isinstance(r, Route)]
+    return _original_get_route_name(scope, filtered)
+
+_pfi_routing._get_route_name = _patched_get_route_name
+
 logger = logging.getLogger("app")
 
 
@@ -179,8 +190,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-Instrumentator().instrument(app)
-
 app.include_router(ops_router)
 app.include_router(auth_router)
 app.include_router(orders_router)
@@ -189,3 +198,5 @@ app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(metrics_router)
 app.include_router(sse_router)
+
+Instrumentator().instrument(app).expose(app)

@@ -9,12 +9,32 @@ from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.order import Order, OrderStatus
 from app.models.order_event import OrderEvent
+from app.models.user import User
+from app.schemas.orders import ServiceOrderCreate
+from app.services.event_bus import publish
 
 
-def reserve_stock_for_order(db: Session, order_id: int) -> None:
+def _publish_stock_updates(products_map: dict[int, Product]) -> None:
+    """
+    Notify the frontend (Inventory page + Create Order catalog) that stock
+    levels changed as a side effect of an order transition (reserve/release/
+    cancel), not just from a manual edit in the Inventory page.
+    """
+    for product in products_map.values():
+        publish({
+            "type": "inventory_update",
+            "product_id": product.id,
+            "sku": product.sku,
+            "name": product.name,
+            "stock_qty": product.stock_qty,
+        })
+
+
+def reserve_stock_for_order(db: Session, order_id: int) -> dict[int, Product]:
     """
     Lock products rows (FOR UPDATE), validate stock, decrement stock_qty.
-    Caller owns the transaction + commit/rollback.
+    Caller owns the transaction + commit/rollback, and should publish stock
+    updates only after a successful commit (see _publish_stock_updates).
     """
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     if not items:
@@ -45,15 +65,18 @@ def reserve_stock_for_order(db: Session, order_id: int) -> None:
     for it in items:
         products_map[it.product_id].stock_qty -= it.qty
 
+    return products_map
 
-def restock_for_order(db: Session, order_id: int) -> None:
+
+def restock_for_order(db: Session, order_id: int) -> dict[int, Product]:
     """
     Lock products rows (FOR UPDATE), increment stock_qty based on order items.
-    Caller owns the transaction + commit/rollback.
+    Caller owns the transaction + commit/rollback, and should publish stock
+    updates only after a successful commit (see _publish_stock_updates).
     """
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     if not items:
-        return
+        return {}
 
     product_ids = sorted({it.product_id for it in items})
 
@@ -69,6 +92,8 @@ def restock_for_order(db: Session, order_id: int) -> None:
         if not p:
             raise HTTPException(status_code=400, detail=f"Product {it.product_id} not found")
         p.stock_qty += it.qty
+
+    return products_map
 
 
 def get_order(db: Session, order_id: int) -> Order:
@@ -147,10 +172,11 @@ def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str |
         raise HTTPException(status_code=409, detail="Order previously failed reservation")
 
     try:
-        reserve_stock_for_order(db, order_id)
+        products_map = reserve_stock_for_order(db, order_id)
         transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
         db.commit()
         db.refresh(order)
+        _publish_stock_updates(products_map)
         return order
 
     except HTTPException as e:
@@ -182,10 +208,11 @@ def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id:
         )
 
     try:
-        reserve_stock_for_order(db, order_id)
+        products_map = reserve_stock_for_order(db, order_id)
         transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
         db.commit()
         db.refresh(order)
+        _publish_stock_updates(products_map)
         return order
 
     except HTTPException as e:
@@ -215,6 +242,11 @@ def start_pick_flow(db: Session, order_id: int, actor=None, request_id: str | No
             status_code=409,
             detail=f"Cannot start picking from {order.status}. Expected {OrderStatus.RESERVED}.",
         )
+
+    # First operator to act on the order claims it: from this point on it
+    # only shows up in that operator's "my orders" list, not in the shared pool.
+    if order.assigned_operator_id is None and actor is not None:
+        order.assigned_operator_id = actor.id
 
     transition(db, order, OrderStatus.PICKING, actor=actor, request_id=request_id)
     db.commit()
@@ -271,8 +303,9 @@ def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | 
         raise HTTPException(status_code=409, detail="Cannot cancel a shipped order")
 
     try:
+        products_map = {}
         if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
-            restock_for_order(db, order_id)
+            products_map = restock_for_order(db, order_id)
 
         transition(db, order, OrderStatus.CANCELLED, actor=actor, request_id=request_id)
 
@@ -280,12 +313,55 @@ def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | 
 
         db.commit()
         db.refresh(order)
+        if products_map:
+            _publish_stock_updates(products_map)
         return order
 
     except Exception:
         db.rollback()
         raise
     
+def create_service_order(db: Session, payload: ServiceOrderCreate, service_user: User) -> Order:
+    """
+    Variant of create_order for service-to-service calls (System 2).
+    customer_id stays the 'service' account's id, since System 1 has no
+    concept of an end customer - the order belongs to the integration.
+    reference holds System 2's SalesOrder id, for traceability.
+    """
+    order = Order(
+        customer_id=service_user.id,
+        reference=payload.reference,
+        source_company=payload.source_company,
+        status=OrderStatus.NEW,
+    )
+    db.add(order)
+    db.flush()
+
+    for it in payload.items:
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=it.product_id,
+                qty=it.qty,
+            )
+        )
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            action="ORDER_CREATED",
+            from_status=None,
+            to_status=str(OrderStatus.NEW),
+            actor_user_id=service_user.id,
+            actor_role=service_user.role,
+        )
+    )
+
+    db.commit()
+    db.refresh(order)
+    return order
+
+
 def integration_reserve_flow(db: Session, order_id: int):
     order = get_order(db, order_id)
 
@@ -293,9 +369,10 @@ def integration_reserve_flow(db: Session, order_id: int):
         return {"status": "RESERVED"}
 
     try:
-        reserve_stock_for_order(db, order_id)
+        products_map = reserve_stock_for_order(db, order_id)
         transition(db, order, OrderStatus.RESERVED, actor=None, request_id=None)
         db.commit()
+        _publish_stock_updates(products_map)
         return {"status": "RESERVED"}
     except Exception:
         db.rollback()
@@ -317,14 +394,17 @@ def integration_release_flow(db: Session, order_id: int):
         raise HTTPException(status_code=409, detail=f"Cannot release from {order.status}")
 
     try:
+        products_map = {}
         if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
-            restock_for_order(db, order_id)
+            products_map = restock_for_order(db, order_id)
 
         transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=None)
 
         schedule_order_archive(order)
 
         db.commit()
+        if products_map:
+            _publish_stock_updates(products_map)
         return {"status": "CANCELLED"}
     except Exception:
         db.rollback()
