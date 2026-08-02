@@ -12,6 +12,8 @@ from app.models.refresh_token import RefreshToken
 from app.models.inventory_event import InventoryEvent
 from app.db import models
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 config = context.config
 
