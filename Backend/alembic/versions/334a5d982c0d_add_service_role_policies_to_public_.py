@@ -32,15 +32,30 @@ TABLES = [
 ]
 
 def upgrade() -> None:
-    for table in TABLES:
-        op.execute(f"""
-            CREATE POLICY "service_role_only" ON public.{table}
-            FOR ALL
-            TO service_role
-            USING (true)
-            WITH CHECK (true);
-        """)
+    policy_statements = "\n".join(
+        f'CREATE POLICY "service_role_only" ON public.{table} '
+        f'FOR ALL TO service_role USING (true) WITH CHECK (true);'
+        for table in TABLES
+    )
+    op.execute(f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+                {policy_statements}
+            END IF;
+        END $$;
+    """)
 
 def downgrade() -> None:
-    for table in TABLES:
-        op.execute(f'DROP POLICY IF EXISTS "service_role_only" ON public.{table};')
+    policy_statements = "\n".join(
+        f'DROP POLICY IF EXISTS "service_role_only" ON public.{table};'
+        for table in TABLES
+    )
+    op.execute(f"""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+                {policy_statements}
+            END IF;
+        END $$;
+    """)
