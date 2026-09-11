@@ -29,7 +29,13 @@ class Settings(BaseSettings):
     # Delete account brute-force protection
     delete_account_max_attempts: int = 5
     delete_account_lock_minutes: int = 15
-    
+
+    # Kafka (Aiven for Apache Kafka - SASL_SSL)
+    kafka_bootstrap_servers: str = ""
+    kafka_username: str = ""
+    kafka_password: str = ""
+    kafka_ssl_ca_path: str = ""
+
 
     model_config = SettingsConfigDict(env_file=".env")
 

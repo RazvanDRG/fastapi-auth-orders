@@ -12,6 +12,9 @@ from app.models.user import User
 from app.models.user_admin_event import UserAdminEvent
 
 from app.services.archive_service import archive_due_orders
+from app.services.kafka_producer import publish_event
+import uuid
+from datetime import datetime, timezone
 
 
 ops_router = APIRouter(prefix="/ops", tags=["Ops"])
@@ -170,3 +173,22 @@ def process_order_archive():
 
     finally:
         db.close()
+
+
+@ops_router.post("/kafka-test", summary="Publish a test event to Kafka (temporary, Day 1 sanity check)")
+async def kafka_test(current_user: User = Depends(get_current_user)):
+    if current_user.role != Roles.ADMIN:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": "wms.test.ping",
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "order_id": 0,
+        "request_id": None,
+        "payload": {"message": "hello from System 1"},
+    }
+
+    await publish_event("wms.order.audit", event)
+
+    return {"status": "published", "event": event}

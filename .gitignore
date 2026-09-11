@@ -24,6 +24,10 @@ Backend/.env
 Backend/.env.*
 !Backend/.env.example
 
+# Kafka credentials (Aiven CA certificate)
+Backend/app/certs/ca.pem
+Backend/app/certs/*.pem
+
 # Docker / local DB data
 pgdata/
 postgres-data/
@@ -68,3 +72,5 @@ coverage/
 .cache/
 
 Frontend/node_modules/
+
+.claude/settings.local.json
