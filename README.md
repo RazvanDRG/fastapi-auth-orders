@@ -152,6 +152,79 @@ Response (JSON)
 
 ---
 
+## 📨 Event Publishing
+
+Order lifecycle changes are published to Kafka (Aiven, SASL_SSL) via a transactional outbox: each event is written to an `outbox_events` table in the same DB transaction as the business change it describes (create, reserve, release, pick), and a background worker polls unpublished rows and publishes them to Kafka — so an event only ever exists if its transaction actually committed, and nothing is lost if the worker crashes mid-pass.
+
+Every published message shares the same envelope:
+
+```json
+{
+  "event_id": "c5b0bf9f-9d2d-442d-b39c-a80141ed6917",
+  "event_type": "wms.order.audit",
+  "occurred_at": "2026-09-11T12:20:10.655044+00:00",
+  "order_id": 32,
+  "request_id": "d6r2-reserve-1789129210",
+  "payload": { }
+}
+```
+
+### Topics
+
+**`wms.order.audit`** — mirrors every `OrderEvent` audit row (`{action, from_status, to_status, actor_role}`), written on order creation and on every status transition (reserve, start-pick, confirm-pick, ship, cancel, failed reservation).
+
+```json
+{
+  "payload": {
+    "action": "STATUS_CHANGE",
+    "from_status": "OrderStatus.NEW",
+    "to_status": "OrderStatus.RESERVED",
+    "actor_role": "operator"
+  }
+}
+```
+
+**`wms.stock.reserved`** — emitted when stock is successfully reserved for an order.
+
+```json
+{
+  "payload": {
+    "order_id": 32,
+    "products": [
+      { "product_id": 1, "sku": "SKU-010", "name": "Laptop ASUS ROG 105", "stock_qty": 78 }
+    ]
+  }
+}
+```
+
+**`wms.stock.released`** — emitted when previously reserved stock is returned to inventory (e.g. order cancelled after reservation).
+
+```json
+{
+  "payload": {
+    "order_id": 33,
+    "products": [
+      { "product_id": 1, "sku": "SKU-010", "name": "Laptop ASUS ROG 105", "stock_qty": 78 }
+    ]
+  }
+}
+```
+
+**`wms.pick.completed`** — emitted when an order's items are confirmed picked.
+
+```json
+{
+  "payload": {
+    "order_id": 32,
+    "items": [
+      { "product_id": 1, "qty": 1 }
+    ]
+  }
+}
+```
+
+---
+
 ## 🧪 Running Locally
 
 ### Start services
