@@ -19,6 +19,8 @@ from app.api.routes.users import router as users_router
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.archive_service import archive_due_orders
+from app.services.kafka_producer import start_kafka_producer, stop_kafka_producer
+from app.services.outbox_service import publish_pending_outbox_events
 from app.api.routes.products import router as products_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.sse import router as sse_router
@@ -59,13 +61,41 @@ async def archive_orders_worker():
         await asyncio.sleep(60)
 
 
+async def kafka_outbox_worker():
+    # Shorter interval than archive_orders_worker: archival is best-effort
+    # within minutes, but outbox delivery should stay close to real-time.
+    while True:
+        db = SessionLocal()
+
+        try:
+            published = await publish_pending_outbox_events(db)
+
+            if published > 0:
+                logger.info(
+                    "outbox_events_published",
+                    extra={"published_events": published},
+                )
+
+        except Exception:
+            logger.exception("kafka_outbox_worker_failed")
+
+        finally:
+            db.close()
+
+        await asyncio.sleep(10)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await start_kafka_producer()
     task = asyncio.create_task(archive_orders_worker())
+    outbox_task = asyncio.create_task(kafka_outbox_worker())
     try:
         yield
     finally:
         task.cancel()
+        outbox_task.cancel()
+        await stop_kafka_producer()
 
 
 app = FastAPI(

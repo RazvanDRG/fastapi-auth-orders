@@ -20,6 +20,7 @@ from app.services.orders_service import (
     confirm_pick_flow,
     ship_order_flow,
     cancel_order_flow,
+    write_outbox_event,
 )
 from app.services.event_bus import publish
 
@@ -87,6 +88,18 @@ def create_order(
             actor_role=current_user.role,
             request_id=_request_id(request),
         )
+    )
+
+    write_outbox_event(
+        db, order.id, "wms.order.audit",
+        {
+            "action": "ORDER_CREATED",
+            "order_id": order.id,
+            "reference": order.reference,
+            "customer_id": current_user.id,
+            "items": [{"product_id": it.product_id, "qty": it.qty} for it in payload.items],
+        },
+        request_id=_request_id(request),
     )
 
     db.commit()

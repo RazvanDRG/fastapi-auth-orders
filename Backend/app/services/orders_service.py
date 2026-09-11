@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from fastapi import HTTPException
 
 from app.models.order_item import OrderItem
+from app.models.outbox_event import OutboxEvent
 from app.models.product import Product
 from app.models.order import Order, OrderStatus
 from app.models.order_event import OrderEvent
@@ -28,6 +30,41 @@ def _publish_stock_updates(products_map: dict[int, Product]) -> None:
             "name": product.name,
             "stock_qty": product.stock_qty,
         })
+
+
+def write_outbox_event(
+    db: Session,
+    order_id: int,
+    event_type: str,
+    payload: dict,
+    request_id: str | None = None,
+) -> None:
+    """
+    Transactional outbox: written in the same db transaction as the order
+    state change it describes, so the event row and the business change
+    commit or roll back together. services/outbox_service.py polls rows
+    with published=False and hands them to Kafka after this commits.
+    """
+    db.add(
+        OutboxEvent(
+            order_id=order_id,
+            event_type=event_type,
+            request_id=request_id,
+            payload=json.dumps(payload),
+        )
+    )
+
+
+def _stock_event_lines(products_map: dict[int, Product]) -> list[dict]:
+    return [
+        {
+            "product_id": p.id,
+            "sku": p.sku,
+            "name": p.name,
+            "stock_qty": p.stock_qty,
+        }
+        for p in products_map.values()
+    ]
 
 
 def reserve_stock_for_order(db: Session, order_id: int) -> dict[int, Product]:
@@ -174,6 +211,11 @@ def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str |
     try:
         products_map = reserve_stock_for_order(db, order_id)
         transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
+        write_outbox_event(
+            db, order_id, "wms.stock.reserved",
+            {"order_id": order_id, "products": _stock_event_lines(products_map)},
+            request_id=request_id,
+        )
         db.commit()
         db.refresh(order)
         _publish_stock_updates(products_map)
@@ -210,6 +252,11 @@ def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id:
     try:
         products_map = reserve_stock_for_order(db, order_id)
         transition(db, order, OrderStatus.RESERVED, actor=actor, request_id=request_id)
+        write_outbox_event(
+            db, order_id, "wms.stock.reserved",
+            {"order_id": order_id, "products": _stock_event_lines(products_map)},
+            request_id=request_id,
+        )
         db.commit()
         db.refresh(order)
         _publish_stock_updates(products_map)
@@ -267,6 +314,16 @@ def confirm_pick_flow(db: Session, order_id: int, actor=None, request_id: str | 
         )
 
     transition(db, order, OrderStatus.PICKED, actor=actor, request_id=request_id)
+
+    write_outbox_event(
+        db, order_id, "wms.pick.completed",
+        {
+            "order_id": order_id,
+            "items": [{"product_id": it.product_id, "qty": it.qty} for it in order.items],
+        },
+        request_id=request_id,
+    )
+
     db.commit()
     db.refresh(order)
     return order
@@ -311,6 +368,13 @@ def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | 
 
         schedule_order_archive(order)
 
+        if products_map:
+            write_outbox_event(
+                db, order_id, "wms.stock.released",
+                {"order_id": order_id, "products": _stock_event_lines(products_map)},
+                request_id=request_id,
+            )
+
         db.commit()
         db.refresh(order)
         if products_map:
@@ -320,8 +384,13 @@ def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | 
     except Exception:
         db.rollback()
         raise
-    
-def create_service_order(db: Session, payload: ServiceOrderCreate, service_user: User) -> Order:
+
+def create_service_order(
+    db: Session,
+    payload: ServiceOrderCreate,
+    service_user: User,
+    request_id: str | None = None,
+) -> Order:
     """
     Variant of create_order for service-to-service calls (System 2).
     customer_id stays the 'service' account's id, since System 1 has no
@@ -354,7 +423,20 @@ def create_service_order(db: Session, payload: ServiceOrderCreate, service_user:
             to_status=str(OrderStatus.NEW),
             actor_user_id=service_user.id,
             actor_role=service_user.role,
+            request_id=request_id,
         )
+    )
+
+    write_outbox_event(
+        db, order.id, "wms.order.audit",
+        {
+            "action": "ORDER_CREATED",
+            "order_id": order.id,
+            "reference": order.reference,
+            "source_company": order.source_company,
+            "items": [{"product_id": it.product_id, "qty": it.qty} for it in payload.items],
+        },
+        request_id=request_id,
     )
 
     db.commit()
@@ -362,7 +444,7 @@ def create_service_order(db: Session, payload: ServiceOrderCreate, service_user:
     return order
 
 
-def integration_reserve_flow(db: Session, order_id: int):
+def integration_reserve_flow(db: Session, order_id: int, request_id: str | None = None):
     order = get_order(db, order_id)
 
     if order.status == OrderStatus.RESERVED:
@@ -370,7 +452,12 @@ def integration_reserve_flow(db: Session, order_id: int):
 
     try:
         products_map = reserve_stock_for_order(db, order_id)
-        transition(db, order, OrderStatus.RESERVED, actor=None, request_id=None)
+        transition(db, order, OrderStatus.RESERVED, actor=None, request_id=request_id)
+        write_outbox_event(
+            db, order_id, "wms.stock.reserved",
+            {"order_id": order_id, "products": _stock_event_lines(products_map)},
+            request_id=request_id,
+        )
         db.commit()
         _publish_stock_updates(products_map)
         return {"status": "RESERVED"}
@@ -379,7 +466,7 @@ def integration_reserve_flow(db: Session, order_id: int):
         raise
 
 
-def integration_release_flow(db: Session, order_id: int):
+def integration_release_flow(db: Session, order_id: int, request_id: str | None = None):
     order = get_order(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
@@ -398,9 +485,16 @@ def integration_release_flow(db: Session, order_id: int):
         if order.status in (OrderStatus.RESERVED, OrderStatus.PICKING, OrderStatus.PICKED):
             products_map = restock_for_order(db, order_id)
 
-        transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=None)
+        transition(db, order, OrderStatus.CANCELLED, actor=None, request_id=request_id)
 
         schedule_order_archive(order)
+
+        if products_map:
+            write_outbox_event(
+                db, order_id, "wms.stock.released",
+                {"order_id": order_id, "products": _stock_event_lines(products_map)},
+                request_id=request_id,
+            )
 
         db.commit()
         if products_map:

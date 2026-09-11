@@ -10,6 +10,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.refresh_token import RefreshToken
 from app.models.inventory_event import InventoryEvent
+from app.models.outbox_event import OutboxEvent
 from app.db import models
 import os
 from dotenv import load_dotenv
