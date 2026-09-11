@@ -55,6 +55,32 @@ def write_outbox_event(
     )
 
 
+def write_order_audit_event(
+    db: Session,
+    order_id: int,
+    action: str,
+    from_status,
+    to_status,
+    actor=None,
+    request_id: str | None = None,
+) -> None:
+    """
+    Mirrors an OrderEvent row onto wms.order.audit (System2_Architecture_Plan
+    Sect. 7.4): same 4 fields, written in the same transaction as the
+    OrderEvent it shadows, for every status transition - not just create.
+    """
+    write_outbox_event(
+        db, order_id, "wms.order.audit",
+        {
+            "action": action,
+            "from_status": str(from_status) if from_status is not None else None,
+            "to_status": str(to_status) if to_status is not None else None,
+            "actor_role": getattr(actor, "role", None),
+        },
+        request_id=request_id,
+    )
+
+
 def _stock_event_lines(products_map: dict[int, Product]) -> list[dict]:
     return [
         {
@@ -197,8 +223,12 @@ def transition(
             request_id=request_id,
         )
     )
-    
-    
+
+    write_order_audit_event(
+        db, order.id, "STATUS_CHANGE", old, to_status, actor=actor, request_id=request_id,
+    )
+
+
 def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
     order = get_order(db, order_id)
 
@@ -427,16 +457,8 @@ def create_service_order(
         )
     )
 
-    write_outbox_event(
-        db, order.id, "wms.order.audit",
-        {
-            "action": "ORDER_CREATED",
-            "order_id": order.id,
-            "reference": order.reference,
-            "source_company": order.source_company,
-            "items": [{"product_id": it.product_id, "qty": it.qty} for it in payload.items],
-        },
-        request_id=request_id,
+    write_order_audit_event(
+        db, order.id, "ORDER_CREATED", None, OrderStatus.NEW, actor=service_user, request_id=request_id,
     )
 
     db.commit()
