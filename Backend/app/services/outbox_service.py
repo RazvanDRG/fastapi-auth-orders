@@ -19,17 +19,29 @@ async def publish_pending_outbox_events(db: Session) -> int:
     re-sent - observed during Day 4 manual testing, where killing the process
     mid-loop discarded an already-acked publish because nothing had committed
     yet.
+
+    Claims one row at a time with FOR UPDATE SKIP LOCKED, so two replicas
+    never publish the same row. Locking the whole batch up front would not
+    work: the per-row commit releases every lock, not just the current one.
     """
-    pending = (
-        db.query(OutboxEvent)
-        .filter(OutboxEvent.published.is_(False))
-        .order_by(OutboxEvent.occurred_at.asc())
-        .all()
-    )
-
     published_count = 0
+    failed_ids = []
 
-    for row in pending:
+    while True:
+        query = db.query(OutboxEvent).filter(OutboxEvent.published.is_(False))
+        if failed_ids:
+            # Skip rows that already failed in this pass, retried on the next poll.
+            query = query.filter(OutboxEvent.id.notin_(failed_ids))
+
+        row = (
+            query.order_by(OutboxEvent.occurred_at.asc())
+            .with_for_update(skip_locked=True)
+            .first()
+        )
+        if row is None:
+            break
+
+        row_id = row.id
         event = {
             "event_id": str(row.id),
             "event_type": row.event_type,
@@ -53,6 +65,6 @@ async def publish_pending_outbox_events(db: Session) -> int:
             # Leave unpublished - the next poll pass retries it. This is the
             # at-least-once delivery guarantee the outbox pattern exists for.
             db.rollback()
-            continue
+            failed_ids.append(row_id)
 
     return published_count

@@ -1,3 +1,5 @@
+import asyncio
+import json
 import os
 import time
 import uuid
@@ -15,6 +17,9 @@ from app.models.password_reset_code import PasswordResetCode
 from app.models.refresh_token import RefreshToken
 from app.services.auth import hash_reset_code, hash_password
 from app.models.user_admin_event import UserAdminEvent
+from app.models.order import Order  # noqa: F401 - registers 'orders' for the outbox FK
+from app.models.outbox_event import OutboxEvent
+from app.services.outbox_service import publish_pending_outbox_events
 
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -678,4 +683,50 @@ def test_soft_delete_user_creates_admin_audit_event():
         assert event.old_role == Roles.OPERATOR
         assert event.new_role is None
     finally:
+        db.close()
+
+def test_outbox_row_stays_unpublished_when_kafka_producer_not_started():
+    # pytest never runs the app lifespan, so the Kafka producer is not started
+    # here: publishing must fail and the row must stay pending for a retry.
+    wait_api()
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
+    token = login_access_token(OP_EMAIL, OP_PASS)
+    product_id = ensure_test_product()
+
+    r = httpx.post(
+        f"{BASE_URL}/orders",
+        headers=auth_headers(token),
+        json={
+            "customer_id": CUSTOMER_ID,
+            "reference": f"NL-OUTBOX-TEST-{uuid.uuid4().hex[:8]}",
+            "items": [{"product_id": product_id, "qty": 1}],
+        },
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+    order_id = r.json()["id"]
+
+    db = SessionLocal()
+    row_id = None
+    try:
+        row = OutboxEvent(
+            event_type="wms.order.audit",
+            order_id=order_id,
+            payload=json.dumps({"test": True}),
+        )
+        db.add(row)
+        db.commit()
+        row_id = row.id
+
+        asyncio.run(publish_pending_outbox_events(db))
+
+        db.expire_all()
+        row = db.get(OutboxEvent, row_id)
+        assert row.published is False
+        assert row.published_at is None
+    finally:
+        db.rollback()
+        if row_id is not None:
+            db.query(OutboxEvent).filter(OutboxEvent.id == row_id).delete()
+            db.commit()
         db.close()
