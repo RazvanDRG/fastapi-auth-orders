@@ -68,8 +68,10 @@ async def publish_event(topic: str, event: dict) -> None:
     decoupling goal described in the architecture plan (Section 7).
     """
     if _producer is None:
+        # Raise instead of returning: the outbox worker treats a clean return
+        # as delivered and would mark the row published, losing the event.
         logger.warning("kafka_publish_skipped", extra={"topic": topic, "reason": "producer not started"})
-        return
+        raise RuntimeError("Kafka producer not started")
 
     try:
         await asyncio.wait_for(_producer.send_and_wait(topic, event), timeout=PUBLISH_TIMEOUT_S)
