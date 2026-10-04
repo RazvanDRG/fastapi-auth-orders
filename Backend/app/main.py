@@ -38,6 +38,16 @@ _pfi_routing._get_route_name = _patched_get_route_name
 
 logger = logging.getLogger("app")
 
+# Without a handler the "app" logger falls back to WARNING and INFO events
+# (kafka_producer_started, outbox_events_published) are dropped. Configured
+# here only, so library loggers (aiokafka, sqlalchemy) keep their defaults.
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
 
 async def archive_orders_worker():
     while True:
