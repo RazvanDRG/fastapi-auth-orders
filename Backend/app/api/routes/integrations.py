@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.rbac import require_roles
@@ -34,15 +34,25 @@ def _publish_order_update(order_id: int, status: str) -> None:
     })
 
 
-@router.post("/orders", response_model=OrderOut, summary="Create order (service-to-service)")
+@router.post(
+    "/orders",
+    response_model=OrderOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create order (service-to-service)",
+    responses={200: {"model": OrderOut, "description": "Retry: order with this source_company and reference already exists"}},
+)
 def integration_create_order(
     payload: ServiceOrderCreate,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    order = create_service_order(db, payload, current_user, request_id=_request_id(request))
-    _publish_order_update(order.id, str(order.status))
+    order, created = create_service_order(db, payload, current_user, request_id=_request_id(request))
+    if created:
+        _publish_order_update(order.id, str(order.status))
+    else:
+        response.status_code = status.HTTP_200_OK
     return order
 
 
