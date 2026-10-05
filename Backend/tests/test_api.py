@@ -19,6 +19,7 @@ from app.services.auth import hash_reset_code, hash_password
 from app.models.user_admin_event import UserAdminEvent
 from app.models.order import Order  # noqa: F401 - registers 'orders' for the outbox FK
 from app.models.outbox_event import OutboxEvent
+from app.models.order_event import OrderEvent
 from app.services.outbox_service import publish_pending_outbox_events
 
 
@@ -730,3 +731,146 @@ def test_outbox_row_stays_unpublished_when_kafka_producer_not_started():
             db.query(OutboxEvent).filter(OutboxEvent.id == row_id).delete()
             db.commit()
         db.close()
+
+
+def create_integration_order(svc_token: str, product_id: int, qty: int) -> int:
+    r = httpx.post(
+        f"{BASE_URL}/integrations/orders",
+        headers=auth_headers(svc_token),
+        json={
+            "reference": f"S2-TEST-{uuid.uuid4().hex[:8]}",
+            "source_company": "System 2 - Test",
+            "items": [{"product_id": product_id, "qty": qty}],
+        },
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "NEW"
+    return r.json()["id"]
+
+
+def get_product_stock(product_id: int) -> int:
+    db = SessionLocal()
+    try:
+        return db.get(Product, product_id).stock_qty
+    finally:
+        db.close()
+
+
+def test_integration_reserve_insufficient_stock_moves_order_to_failed_reservation():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+    stock_before = get_product_stock(product_id)
+
+    order_id = create_integration_order(svc_token, product_id, stock_before + 1000)
+
+    r = httpx.post(f"{BASE_URL}/integrations/orders/{order_id}/reserve", headers=auth_headers(svc_token), timeout=10)
+    assert r.status_code == 409, r.text
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, order_id)
+        assert order.status.value == "FAILED_RESERVATION"
+
+        events = db.scalars(select(OrderEvent).where(OrderEvent.order_id == order_id)).all()
+        assert any(
+            e.action == "STATUS_CHANGE" and e.to_status.endswith("FAILED_RESERVATION") for e in events
+        ), [(e.action, e.to_status) for e in events]
+
+        audit_rows = db.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.order_id == order_id,
+                OutboxEvent.event_type == "wms.order.audit",
+            )
+        ).all()
+        assert any(
+            json.loads(row.payload)["to_status"].endswith("FAILED_RESERVATION") for row in audit_rows
+        ), [row.payload for row in audit_rows]
+
+        reserved_rows = db.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.order_id == order_id,
+                OutboxEvent.event_type == "wms.stock.reserved",
+            )
+        ).all()
+        assert reserved_rows == []
+    finally:
+        db.close()
+
+    assert get_product_stock(product_id) == stock_before
+
+
+def test_integration_release_on_new_order_cancels_without_restock():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+
+    order_id = create_integration_order(svc_token, product_id, 1)
+    stock_before = get_product_stock(product_id)
+
+    r = httpx.post(f"{BASE_URL}/integrations/orders/{order_id}/release", headers=auth_headers(svc_token), timeout=10)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "CANCELLED"
+
+    assert get_product_stock(product_id) == stock_before
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, order_id)
+        assert order.status.value == "CANCELLED"
+
+        released_rows = db.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.order_id == order_id,
+                OutboxEvent.event_type == "wms.stock.released",
+            )
+        ).all()
+        assert released_rows == []
+    finally:
+        db.close()
+
+
+def test_integration_reserve_repeated_409_keeps_failed_reservation_without_new_audit():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+    stock_before = get_product_stock(product_id)
+
+    order_id = create_integration_order(svc_token, product_id, stock_before + 1000)
+
+    r = httpx.post(f"{BASE_URL}/integrations/orders/{order_id}/reserve", headers=auth_headers(svc_token), timeout=10)
+    assert r.status_code == 409, r.text
+
+    r = httpx.post(f"{BASE_URL}/integrations/orders/{order_id}/reserve", headers=auth_headers(svc_token), timeout=10)
+    assert r.status_code == 409, r.text
+    assert "Insufficient stock" in r.json()["detail"], r.text
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, order_id)
+        assert order.status.value == "FAILED_RESERVATION"
+
+        failed_events = [
+            e for e in db.scalars(select(OrderEvent).where(OrderEvent.order_id == order_id)).all()
+            if e.to_status and e.to_status.endswith("FAILED_RESERVATION")
+        ]
+        assert len(failed_events) == 1, failed_events
+
+        failed_audit_rows = [
+            row for row in db.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.order_id == order_id,
+                    OutboxEvent.event_type == "wms.order.audit",
+                )
+            ).all()
+            if (json.loads(row.payload)["to_status"] or "").endswith("FAILED_RESERVATION")
+        ]
+        assert len(failed_audit_rows) == 1, [row.payload for row in failed_audit_rows]
+    finally:
+        db.close()
+
+    assert get_product_stock(product_id) == stock_before
