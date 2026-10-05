@@ -744,7 +744,7 @@ def create_integration_order(svc_token: str, product_id: int, qty: int) -> int:
         },
         timeout=10,
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code == 201, r.text
     assert r.json()["status"] == "NEW"
     return r.json()["id"]
 
@@ -874,3 +874,116 @@ def test_integration_reserve_repeated_409_keeps_failed_reservation_without_new_a
         db.close()
 
     assert get_product_stock(product_id) == stock_before
+
+
+def _post_integration_order(svc_token: str, reference: str, items: list[dict]) -> httpx.Response:
+    return httpx.post(
+        f"{BASE_URL}/integrations/orders",
+        headers=auth_headers(svc_token),
+        json={"reference": reference, "source_company": "System 2 - Test", "items": items},
+        timeout=10,
+    )
+
+
+def test_integration_create_order_retry_returns_same_order():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+    reference = f"S2-DEDUPE-{uuid.uuid4().hex[:8]}"
+    items = [{"product_id": product_id, "qty": 1}]
+
+    first = _post_integration_order(svc_token, reference, items)
+    assert first.status_code == 201, first.text
+
+    second = _post_integration_order(svc_token, reference, items)
+    assert second.status_code == 200, second.text
+    assert second.json()["id"] == first.json()["id"]
+
+    db = SessionLocal()
+    try:
+        orders = db.scalars(
+            select(Order).where(Order.source_company == "System 2 - Test", Order.reference == reference)
+        ).all()
+        assert len(orders) == 1, [o.id for o in orders]
+    finally:
+        db.close()
+
+
+def test_integration_create_order_same_reference_different_items_is_409():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+    reference = f"S2-DEDUPE-{uuid.uuid4().hex[:8]}"
+
+    first = _post_integration_order(svc_token, reference, [{"product_id": product_id, "qty": 1}])
+    assert first.status_code == 201, first.text
+
+    second = _post_integration_order(svc_token, reference, [{"product_id": product_id, "qty": 2}])
+    assert second.status_code == 409, second.text
+
+
+def test_human_orders_with_same_reference_are_not_deduplicated():
+    wait_api()
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
+    token = login_access_token(OP_EMAIL, OP_PASS)
+    product_id = ensure_test_product()
+    reference = f"NL-DEDUPE-{uuid.uuid4().hex[:8]}"
+    payload = {"reference": reference, "items": [{"product_id": product_id, "qty": 1}]}
+
+    first = httpx.post(f"{BASE_URL}/orders", headers=auth_headers(token), json=payload, timeout=10)
+    second = httpx.post(f"{BASE_URL}/orders", headers=auth_headers(token), json=payload, timeout=10)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["id"] != second.json()["id"]
+    assert first.json()["source_company"] is None
+
+
+def test_integration_create_order_without_reference_is_422():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+
+    r = httpx.post(
+        f"{BASE_URL}/integrations/orders",
+        headers=auth_headers(svc_token),
+        json={"source_company": "System 2 - Test", "items": [{"product_id": product_id, "qty": 1}]},
+        timeout=10,
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_integration_create_order_concurrent_retries_create_one_order():
+    wait_api()
+    ensure_user_with_role(SVC_EMAIL, SVC_PASS, Roles.SERVICE)
+    svc_token = login_access_token(SVC_EMAIL, SVC_PASS)
+    product_id = ensure_test_product()
+    reference = f"S2-RACE-{uuid.uuid4().hex[:8]}"
+    items = [{"product_id": product_id, "qty": 1}]
+
+    async def send_all():
+        async with httpx.AsyncClient(timeout=10) as client:
+            return await asyncio.gather(*[
+                client.post(
+                    f"{BASE_URL}/integrations/orders",
+                    headers=auth_headers(svc_token),
+                    json={"reference": reference, "source_company": "System 2 - Test", "items": items},
+                )
+                for _ in range(5)
+            ])
+
+    responses = asyncio.run(send_all())
+    codes = sorted(r.status_code for r in responses)
+    assert codes == [200, 200, 200, 200, 201], [r.text for r in responses]
+    assert len({r.json()["id"] for r in responses}) == 1
+
+    db = SessionLocal()
+    try:
+        count = db.query(Order).filter(
+            Order.source_company == "System 2 - Test", Order.reference == reference
+        ).count()
+        assert count == 1
+    finally:
+        db.close()

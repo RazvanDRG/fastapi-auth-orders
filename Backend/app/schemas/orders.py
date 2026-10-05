@@ -25,7 +25,8 @@ class OrderCreate(BaseModel):
     
 
 class ServiceOrderCreate(BaseModel):
-    reference: Optional[str] = Field(None, examples=["S2-SO-1042"])
+    # Required: (source_company, reference) is the idempotency key for retries.
+    reference: str = Field(..., min_length=1, max_length=50, examples=["S2-SO-1042"])
     source_company: str = Field(..., examples=["System 2 - RetailCo"])
     items: List[OrderItemCreate]
 

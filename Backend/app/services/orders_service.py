@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 
 from app.models.order_item import OrderItem
@@ -420,13 +421,21 @@ def create_service_order(
     payload: ServiceOrderCreate,
     service_user: User,
     request_id: str | None = None,
-) -> Order:
+) -> tuple[Order, bool]:
     """
     Variant of create_order for service-to-service calls (System 2).
     customer_id stays the 'service' account's id, since System 1 has no
     concept of an end customer - the order belongs to the integration.
     reference holds System 2's SalesOrder id, for traceability.
+
+    Idempotent on (source_company, reference): a retry with the same items
+    returns the existing order, different items raise 409.
+    Returns (order, created).
     """
+    existing = _find_service_order(db, payload)
+    if existing is not None:
+        return _match_existing_service_order(db, existing, payload), False
+
     order = Order(
         customer_id=service_user.id,
         reference=payload.reference,
@@ -434,7 +443,16 @@ def create_service_order(
         status=OrderStatus.NEW,
     )
     db.add(order)
-    db.flush()
+    try:
+        # The unique constraint fires here, before any item or event is written.
+        db.flush()
+    except IntegrityError:
+        # A concurrent request with the same key won the insert.
+        db.rollback()
+        existing = _find_service_order(db, payload)
+        if existing is None:
+            raise
+        return _match_existing_service_order(db, existing, payload), False
 
     for it in payload.items:
         db.add(
@@ -463,6 +481,29 @@ def create_service_order(
 
     db.commit()
     db.refresh(order)
+    return order, True
+
+
+def _find_service_order(db: Session, payload: ServiceOrderCreate) -> Order | None:
+    return db.scalars(
+        select(Order).where(
+            Order.source_company == payload.source_company,
+            Order.reference == payload.reference,
+        )
+    ).first()
+
+
+def _match_existing_service_order(db: Session, order: Order, payload: ServiceOrderCreate) -> Order:
+    stored = sorted(
+        (it.product_id, it.qty)
+        for it in db.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    )
+    requested = sorted((it.product_id, it.qty) for it in payload.items)
+    if stored != requested:
+        raise HTTPException(
+            status_code=409,
+            detail="Order with this source_company and reference already exists with different items",
+        )
     return order
 
 
