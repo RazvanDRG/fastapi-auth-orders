@@ -483,6 +483,18 @@ def integration_reserve_flow(db: Session, order_id: int, request_id: str | None 
         db.commit()
         _publish_stock_updates(products_map)
         return {"status": "RESERVED"}
+    except HTTPException as e:
+        db.rollback()
+
+        # Same compensation as reserve_order_flow: persist the failure so the
+        # caller can see it and release the order instead of leaving it NEW.
+        if e.status_code == 409:
+            order = get_order(db, order_id)
+            if order.status != OrderStatus.FAILED_RESERVATION:
+                transition(db, order, OrderStatus.FAILED_RESERVATION, actor=None, request_id=request_id)
+                db.commit()
+
+        raise
     except Exception:
         db.rollback()
         raise
@@ -495,6 +507,7 @@ def integration_release_flow(db: Session, order_id: int, request_id: str | None 
         return {"status": "CANCELLED"}
 
     if order.status not in (
+        OrderStatus.NEW,
         OrderStatus.RESERVED,
         OrderStatus.PICKING,
         OrderStatus.PICKED,
