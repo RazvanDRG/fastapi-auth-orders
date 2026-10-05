@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 
 from app.db.base import Base
 
@@ -17,6 +17,11 @@ class OrderStatus(str, enum.Enum):
 
 class Order(Base):
     __tablename__ = "orders"
+    # Idempotency key for integration orders. UI orders have NULL source_company,
+    # and Postgres treats NULLs as distinct, so they are never blocked.
+    __table_args__ = (
+        UniqueConstraint("source_company", "reference", name="uq_orders_source_company_reference"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
