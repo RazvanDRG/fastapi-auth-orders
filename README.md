@@ -295,6 +295,11 @@ GitHub Actions runs automatically on push and pull request:
 - `POST /orders/{order_id}/cancel`
 
 ### Integrations (service only)
+- `POST /integrations/orders` — Create order. `source_company` and `reference` are required and act as an idempotency key:
+  - `201 Created` — new order
+  - `200 OK` — retry with the same `(source_company, reference)` and the same items; returns the existing order, nothing new is written
+  - `409 Conflict` — same `(source_company, reference)` with different items
+  - `422` — `reference` missing
 - `POST /integrations/orders/{order_id}/reserve`
 - `POST /integrations/orders/{order_id}/release`
 
