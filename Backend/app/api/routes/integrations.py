@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limit_create_order
 from app.core.rbac import require_roles
 from app.core.roles import Roles
 from app.core.security import get_current_user
@@ -38,6 +39,7 @@ def _publish_order_update(order_id: int, status: str) -> None:
     "/orders",
     response_model=OrderOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_create_order)],
     summary="Create order (service-to-service)",
     responses={200: {"model": OrderOut, "description": "Retry: order with this source_company and reference already exists"}},
 )

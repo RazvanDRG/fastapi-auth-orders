@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     kafka_password: str = ""
     kafka_ssl_ca_path: str = ""
 
+    # Rate limits (in-memory, per instance). Tests lower these; docker-compose raises them.
+    rate_limit_login_max: int = 10
+    rate_limit_login_window_seconds: int = 60
+    rate_limit_forgot_password_max: int = 3
+    rate_limit_forgot_password_window_seconds: int = 900
+    rate_limit_create_order_max: int = 30
+    rate_limit_create_order_window_seconds: int = 60
+    # Header the edge proxy sets to the real caller IP (Cloudflare in front of Render)
+    client_ip_header: str = "cf-connecting-ip"
+
 
     model_config = SettingsConfigDict(env_file=".env")
 

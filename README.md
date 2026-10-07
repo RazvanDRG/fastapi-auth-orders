@@ -331,6 +331,7 @@ GitHub Actions runs automatically on push and pull request:
 - Password reset revokes existing refresh tokens
 - Soft-deleted users cannot login or access protected endpoints
 - Tokens are invalidated if user becomes inactive
+- Rate limits return `429` with a `Retry-After` header: login 10/min and forgot-password 3 per 15 min per client IP (read from the `CLIENT_IP_HEADER` setting, default `cf-connecting-ip`; `X-Forwarded-For` is ignored because clients can forge it), order creation 30/min per user. Counters live in memory per instance, so several replicas would need a shared store like Redis. Limits are settings (`RATE_LIMIT_*`); docker-compose raises them for the HTTP test suite.
 
 ---
 

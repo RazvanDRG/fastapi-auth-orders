@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.rate_limit import limit_forgot_password, limit_login
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.user import User
@@ -53,7 +54,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(limit_login)])
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     user = db.scalar(select(User).where(User.email == email))
@@ -71,7 +72,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 
-@router.post("/forgot-password", response_model=MessageResponse)
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(limit_forgot_password)],
+)
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     generic_response = MessageResponse(
         message="If the account exists, a reset code was sent."

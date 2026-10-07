@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Body, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limit_create_order
 from app.core.rbac import require_roles
 from app.core.security import get_current_user
 from app.db.session import get_db
@@ -43,7 +44,12 @@ def _publish_order(order) -> None:
         "status": str(order.status),
     })
 
-@router.post("", response_model=OrderOut, summary="Create order")
+@router.post(
+    "",
+    response_model=OrderOut,
+    summary="Create order",
+    dependencies=[Depends(limit_create_order)],
+)
 def create_order(
     request: Request,
     payload: OrderCreate = Body(
