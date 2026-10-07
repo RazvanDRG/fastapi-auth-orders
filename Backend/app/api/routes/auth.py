@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -33,6 +35,8 @@ from app.services.refresh_tokens import (
     revoke_refresh_token,
 )
 from app.services.users_service import self_delete_account
+
+logger = logging.getLogger("app")
 
 router = APIRouter(prefix="/auth", tags=["Login"])
 
@@ -72,13 +76,9 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     generic_response = MessageResponse(
         message="If the account exists, a reset code was sent."
     )
-    
-    print(f"[FORGOT] Looking up email: {payload.email}", flush=True)
-    
+
     user = db.scalar(select(User).where(User.email == payload.email))
-    
-    print(f"[FORGOT] User found: {user}, is_deleted: {getattr(user, 'is_deleted', 'N/A')}", flush=True)
-    
+
     if not user or user.is_deleted:
         return generic_response
 
@@ -86,31 +86,21 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         code = issue_password_reset_code(db, user_id=user.id)
         db.commit()
 
-        try:
-            print(f"[FORGOT] Sending email to {user.email}, api_key set: {bool(settings.resend_api_key)}", flush=True)  # ← aici
-            send_password_reset_code(
-                email=user.email,
-                code=code,
-                ttl_minutes=settings.password_reset_code_ttl_minutes,
-            )
-        except Exception as e:
-            print(f"SMTP ERROR: {repr(e)}", flush=True)
-
+        # A send failure still returns the generic response, so it can't be used to probe accounts
         try:
             send_password_reset_code(
                 email=user.email,
                 code=code,
                 ttl_minutes=settings.password_reset_code_ttl_minutes,
             )
-        except Exception as e:
-            import logging
-            logging.error(f"Failed to send reset email to {user.email}: {e}")
+        except Exception as exc:
+            logger.error("Failed to send password reset email to user_id=%s: %r", user.id, exc)
 
         return generic_response
 
     except Exception as exc:
         db.rollback()
-        print("FORGOT_PASSWORD_ERROR:", repr(exc), flush=True)
+        logger.error("Forgot password failed for user_id=%s: %r", user.id, exc)
         raise HTTPException(
             status_code=502,
             detail="Could not send password reset email"
@@ -194,12 +184,3 @@ def delete_my_account(
     db: Session = Depends(get_db),
 ):
     return self_delete_account(db, current_user, password=payload.password)
-
-@router.get("/test-email")
-def test_email():
-    from app.services.email import send_password_reset_code
-    try:
-        send_password_reset_code("razvan.dornea1@gmail.com", "123456", 10)
-        return {"status": "sent"}
-    except Exception as e:
-        return {"status": "error", "detail": repr(e)}
