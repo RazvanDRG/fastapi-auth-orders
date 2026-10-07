@@ -296,11 +296,13 @@ def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id:
     except HTTPException as e:
         db.rollback()
 
+        # Already FAILED_RESERVATION: re-raise the stock 409 instead of an invalid self-transition
         if e.status_code == 409:
             order = get_order(db, order_id)
-            transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
-            db.commit()
-            db.refresh(order)
+            if order.status != OrderStatus.FAILED_RESERVATION:
+                transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
+                db.commit()
+                db.refresh(order)
 
         raise
 
