@@ -27,7 +27,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 **Backend**
 - FastAPI, SQLAlchemy, PostgreSQL (hosted on Supabase), Alembic
 - Docker / Docker Compose
-- Pytest (18 integration tests)
+- Pytest (40 integration tests)
 - GitHub Actions (CI)
 
 **Frontend**
@@ -58,6 +58,9 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 - User registration with email/password and profile fields
 - Password recovery via 6-digit email reset code with expiration and attempt limits
 - Refresh token invalidation after password reset
+- Forgot-password sends exactly one reset email; no secrets or reset codes in logs
+- No debug email endpoint (`/auth/test-email` was removed)
+- Rate limiting per endpoint: `429` with a `Retry-After` header (limits in Notes)
 - Role-Based Access Control (RBAC): `admin`, `operator`, `service`
 - Request ID middleware for traceability
 - Global exception handling
@@ -169,7 +172,16 @@ Every published message shares the same envelope:
 }
 ```
 
+- Managed Kafka on Aiven (free tier), `SASL_SSL` with a dedicated service account whose ACLs allow only the `wms.*` topics
+- The CA certificate is provided to Render as a Secret File; its path goes in `KAFKA_SSL_CA_PATH`
+- The worker claims one row at a time with `FOR UPDATE SKIP LOCKED`, so two replicas never publish the same row
+- A row is never marked published when Kafka is down: it stays in the outbox and is retried on the next poll
+- At-least-once delivery: a row can be sent again if the worker stops between the broker ack and the commit. `event_id` is the outbox row id, so consumers can dedupe on it
+- Local development without Kafka: if `KAFKA_BOOTSTRAP_SERVERS` is empty, the producer stays off and events wait in the outbox until Kafka is available
+
 ### Topics
+
+The topic name equals `event_type`. There are four topics:
 
 **`wms.order.audit`** — mirrors every `OrderEvent` audit row (`{action, from_status, to_status, actor_role}`), written on order creation and on every status transition (reserve, start-pick, confirm-pick, ship, cancel, failed reservation).
 
@@ -226,6 +238,14 @@ Every published message shares the same envelope:
 ---
 
 ## 🧪 Running Locally
+
+### Configure environment
+
+```bash
+cp Backend/.env.example Backend/.env
+```
+
+`Backend/.env.example` contains placeholders only. Put real values in `Backend/.env`, which is gitignored.
 
 ### Start services
 
@@ -300,8 +320,8 @@ GitHub Actions runs automatically on push and pull request:
   - `200 OK` — retry with the same `(source_company, reference)` and the same items; returns the existing order, nothing new is written
   - `409 Conflict` — same `(source_company, reference)` with different items
   - `422` — `reference` missing
-- `POST /integrations/orders/{order_id}/reserve`
-- `POST /integrations/orders/{order_id}/release`
+- `POST /integrations/orders/{order_id}/reserve`: a `409` (insufficient stock) moves the order to `FAILED_RESERVATION`
+- `POST /integrations/orders/{order_id}/release`: also accepts `NEW` orders (cancelled without restock)
 
 ### User Management (admin only)
 - `GET /users`
@@ -347,7 +367,7 @@ GitHub Actions runs automatically on push and pull request:
 
 ---
 
-## 🧪 Testing Strategy (18 tests)
+## 🧪 Testing Strategy (40 tests)
 
 1. Health endpoints (`/ops/live`, `/ops/ready`)
 2. Authentication flow + `/auth/me` requires token
@@ -367,13 +387,34 @@ GitHub Actions runs automatically on push and pull request:
 16. Reset password — new password must differ from current
 17. User role audit event on role update
 18. User soft delete audit event
+19. Outbox row stays unpublished when the Kafka producer is not started
+20. Integration reserve with insufficient stock moves the order to `FAILED_RESERVATION`
+21. Integration release on a `NEW` order cancels without restock
+22. Repeated integration reserve 409 keeps `FAILED_RESERVATION` without a new audit row
+23. Integration order retry returns the same order
+24. Same reference with different items returns 409
+25. UI orders with the same reference are not deduplicated
+26. Integration order without reference returns 422
+27. Concurrent integration retries create one order
+28. `/auth/test-email` is removed
+29. Forgot password sends exactly one email
+30. Repeated retry-reserve 409 returns insufficient stock
+31. Rate limit: login over the limit returns 429 with `Retry-After`
+32. Rate limit: the window resets
+33. Rate limit: different IPs do not share counters
+34. Rate limit: falls back to the client host without the IP header
+35. Rate limit: a forged `X-Forwarded-For` does not change the key
+36. Rate limit: the IP header name comes from settings
+37. Rate limit: a 429 logs the client IP
+38. Rate limit: forgot-password over the limit returns 429
+39. Rate limit: order creation is limited per user
+40. Rate limit: integration order creation over the limit returns 429
 
 ---
 
 ## 🔧 Future Improvements
 
 - Permission-based access control to replace hardcoded role checks
-- Rate limiting on auth endpoints
 - WebSocket / SSE for real-time dashboard updates
 - Email notifications for order state transitions
 
