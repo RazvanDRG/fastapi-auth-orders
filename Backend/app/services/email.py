@@ -1,6 +1,10 @@
+import logging
+
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from app.core.config import settings
+
+logger = logging.getLogger("app")
 
 
 def _get_api_instance():
@@ -11,7 +15,7 @@ def _get_api_instance():
 
 def send_password_reset_code(email: str, code: str, ttl_minutes: int) -> None:
     if not settings.brevo_api_key:
-        print(f"[EMAIL SKIP] No BREVO_API_KEY. Code for {email}: {code}", flush=True)
+        logger.warning("BREVO_API_KEY not set, password reset email not sent")
         return
 
     api = _get_api_instance()
@@ -30,7 +34,7 @@ def send_password_reset_code(email: str, code: str, ttl_minutes: int) -> None:
 
 def send_account_deleted_email(email: str, display_name: str | None = None) -> None:
     if not settings.brevo_api_key:
-        print(f"[EMAIL SKIP] No BREVO_API_KEY. Account deleted email for {email}", flush=True)
+        logger.warning("BREVO_API_KEY not set, account deleted email not sent")
         return
 
     greeting = f"Hi {display_name}," if display_name else "Hi,"

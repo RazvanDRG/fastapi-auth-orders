@@ -987,3 +987,74 @@ def test_integration_create_order_concurrent_retries_create_one_order():
         assert count == 1
     finally:
         db.close()
+
+
+def test_auth_test_email_endpoint_is_removed():
+    wait_api()
+    r = httpx.get(f"{BASE_URL}/auth/test-email", timeout=10)
+    assert r.status_code == 404, r.text
+
+
+def test_forgot_password_sends_exactly_one_email(monkeypatch):
+    from app.api.routes import auth as auth_routes
+    from app.schemas.auth import ForgotPasswordRequest
+
+    email = f"forgotmail_{uuid.uuid4().hex[:6]}@example.com"
+    ensure_user_with_role(email, "Pass1234!", Roles.OPERATOR)
+
+    calls = []
+    monkeypatch.setattr(auth_routes, "send_password_reset_code", lambda **kwargs: calls.append(kwargs))
+
+    # Called in-process so the mock replaces the real sender
+    db = SessionLocal()
+    try:
+        auth_routes.forgot_password(ForgotPasswordRequest(email=email), db)
+    finally:
+        db.close()
+
+    assert len(calls) == 1, calls
+    assert calls[0]["email"] == email
+
+
+def test_retry_reserve_repeated_409_returns_insufficient_stock():
+    wait_api()
+    ensure_user_with_role(OP_EMAIL, OP_PASS, Roles.OPERATOR)
+    token = login_access_token(OP_EMAIL, OP_PASS)
+    product_id = ensure_test_product()
+    stock_before = get_product_stock(product_id)
+
+    r = httpx.post(
+        f"{BASE_URL}/orders",
+        headers=auth_headers(token),
+        json={
+            "customer_id": CUSTOMER_ID,
+            "reference": f"NL-ORDER-TEST-{uuid.uuid4().hex[:8]}",
+            "items": [{"product_id": product_id, "qty": stock_before + 1000}],
+        },
+        timeout=10,
+    )
+    assert r.status_code == 200, r.text
+    order_id = r.json()["id"]
+
+    r = httpx.post(f"{BASE_URL}/orders/{order_id}/reserve", headers=auth_headers(token), timeout=10)
+    assert r.status_code == 409, r.text
+
+    for _ in range(2):
+        r = httpx.post(f"{BASE_URL}/orders/{order_id}/retry-reserve", headers=auth_headers(token), timeout=10)
+        assert r.status_code == 409, r.text
+        assert "Insufficient stock" in r.json()["detail"], r.text
+
+    db = SessionLocal()
+    try:
+        order = db.get(Order, order_id)
+        assert order.status.value == "FAILED_RESERVATION"
+
+        failed_events = [
+            e for e in db.scalars(select(OrderEvent).where(OrderEvent.order_id == order_id)).all()
+            if e.to_status and e.to_status.endswith("FAILED_RESERVATION")
+        ]
+        assert len(failed_events) == 1, failed_events
+    finally:
+        db.close()
+
+    assert get_product_stock(product_id) == stock_before
