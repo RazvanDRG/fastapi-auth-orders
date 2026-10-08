@@ -159,3 +159,36 @@ def test_app_log_line_includes_extra_fields():
 
     assert "INFO app outbox_events_published" in line
     assert line.endswith("published_events=3")
+
+
+def test_archive_worker_db_work_runs_off_the_event_loop_thread(monkeypatch):
+    calls = []
+
+    class FakeDb:
+        def close(self):
+            calls.append(("close", threading.get_ident()))
+
+    def fake_archive(db):
+        calls.append(("archive", threading.get_ident()))
+        return 2
+
+    monkeypatch.setattr(app.main, "SessionLocal", FakeDb)
+    monkeypatch.setattr(app.main, "archive_due_orders", fake_archive)
+
+    async def scenario():
+        loop_thread = threading.get_ident()
+        task = asyncio.create_task(app.main.archive_orders_worker())
+        # One pass, then the worker sits in its 60s sleep
+        for _ in range(200):
+            if len(calls) >= 2:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return loop_thread
+
+    loop_thread = asyncio.run(scenario())
+
+    assert [name for name, _ in calls] == ["archive", "close"]
+    assert all(tid != loop_thread for _, tid in calls)

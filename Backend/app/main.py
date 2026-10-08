@@ -73,7 +73,8 @@ async def archive_orders_worker():
         db = SessionLocal()
 
         try:
-            archived = archive_due_orders(db)
+            # Sync DB work runs in a thread so it never blocks the event loop
+            archived = await asyncio.to_thread(archive_due_orders, db)
 
             if archived > 0:
                 logger.info(
@@ -85,7 +86,7 @@ async def archive_orders_worker():
             logger.exception("archive_worker_failed")
 
         finally:
-            db.close()
+            await asyncio.to_thread(db.close)
 
         await asyncio.sleep(60)
 
