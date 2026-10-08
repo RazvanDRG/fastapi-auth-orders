@@ -1,17 +1,43 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.models.outbox_event import OutboxEvent
-from app.services.kafka_producer import publish_event
+from app.services.kafka_producer import is_producer_started, publish_event
+
+
+def _claim_next_row(db: Session, failed_ids: list) -> OutboxEvent | None:
+    query = db.query(OutboxEvent).filter(OutboxEvent.published.is_(False))
+    if failed_ids:
+        # Skip rows that already failed in this pass, retried on the next poll.
+        query = query.filter(OutboxEvent.id.notin_(failed_ids))
+
+    return (
+        query.order_by(OutboxEvent.occurred_at.asc())
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+
+
+def _mark_published(db: Session, row: OutboxEvent) -> None:
+    row.published = True
+    row.published_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 async def publish_pending_outbox_events(db: Session) -> int:
     """
     Single pass: read unsent outbox rows and publish them to Kafka, one at a
-    time, wrapped now (Day 5) in a while-loop worker on app lifespan, same
-    pattern as archive_orders_worker().
+    time. Called in a loop by kafka_outbox_worker() on app lifespan.
+
+    Stops right away while the producer is not started (Kafka down, still
+    reconnecting): every publish would fail, so rows stay pending for the
+    next poll without being touched.
+
+    The sync DB calls run in a worker thread so they never block the event
+    loop; the session is only used by one thread at a time.
 
     Commits after each successful publish rather than once at the end of the
     batch: if the worker dies mid-pass (crash, restart), rows already
@@ -27,17 +53,8 @@ async def publish_pending_outbox_events(db: Session) -> int:
     published_count = 0
     failed_ids = []
 
-    while True:
-        query = db.query(OutboxEvent).filter(OutboxEvent.published.is_(False))
-        if failed_ids:
-            # Skip rows that already failed in this pass, retried on the next poll.
-            query = query.filter(OutboxEvent.id.notin_(failed_ids))
-
-        row = (
-            query.order_by(OutboxEvent.occurred_at.asc())
-            .with_for_update(skip_locked=True)
-            .first()
-        )
+    while is_producer_started():
+        row = await asyncio.to_thread(_claim_next_row, db, failed_ids)
         if row is None:
             break
 
@@ -57,14 +74,12 @@ async def publish_pending_outbox_events(db: Session) -> int:
 
         try:
             await publish_event(topic, event)
-            row.published = True
-            row.published_at = datetime.now(timezone.utc)
-            db.commit()
+            await asyncio.to_thread(_mark_published, db, row)
             published_count += 1
         except Exception:
             # Leave unpublished - the next poll pass retries it. This is the
             # at-least-once delivery guarantee the outbox pattern exists for.
-            db.rollback()
+            await asyncio.to_thread(db.rollback)
             failed_ids.append(row_id)
 
     return published_count

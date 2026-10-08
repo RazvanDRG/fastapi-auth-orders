@@ -38,12 +38,31 @@ _pfi_routing._get_route_name = _patched_get_route_name
 
 logger = logging.getLogger("app")
 
+# Attributes every LogRecord has; anything else came in through extra=.
+_STANDARD_LOG_ATTRS = set(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {
+    "message",
+    "asctime",
+}
+
+
+class ExtraFieldsFormatter(logging.Formatter):
+    """Appends extra= fields as key=value, otherwise they never reach the output."""
+
+    # formatMessage, not format: extras stay on the first line, before any traceback
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        line = super().formatMessage(record)
+        extras = {k: v for k, v in vars(record).items() if k not in _STANDARD_LOG_ATTRS}
+        if not extras:
+            return line
+        return line + " " + " ".join(f"{k}={v}" for k, v in extras.items())
+
+
 # Without a handler the "app" logger falls back to WARNING and INFO events
 # (kafka_producer_started, outbox_events_published) are dropped. Configured
 # here only, so library loggers (aiokafka, sqlalchemy) keep their defaults.
 if not logger.handlers:
     _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    _handler.setFormatter(ExtraFieldsFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logger.addHandler(_handler)
 logger.setLevel(logging.INFO)
 logger.propagate = False
@@ -54,7 +73,8 @@ async def archive_orders_worker():
         db = SessionLocal()
 
         try:
-            archived = archive_due_orders(db)
+            # Sync DB work runs in a thread so it never blocks the event loop
+            archived = await asyncio.to_thread(archive_due_orders, db)
 
             if archived > 0:
                 logger.info(
@@ -66,7 +86,7 @@ async def archive_orders_worker():
             logger.exception("archive_worker_failed")
 
         finally:
-            db.close()
+            await asyncio.to_thread(db.close)
 
         await asyncio.sleep(60)
 
@@ -90,7 +110,8 @@ async def kafka_outbox_worker():
             logger.exception("kafka_outbox_worker_failed")
 
         finally:
-            db.close()
+            # close() returns the connection to the pool, keep it off the loop
+            await asyncio.to_thread(db.close)
 
         await asyncio.sleep(10)
 

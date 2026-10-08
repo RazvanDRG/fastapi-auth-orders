@@ -19,41 +19,87 @@ _producer: AIOKafkaProducer | None = None
 # (observed during manual testing). Bound each publish attempt independently.
 PUBLISH_TIMEOUT_S = 8
 
+# Background reconnect: 5s, doubling up to 5 min. Each start attempt is
+# bounded so a hanging bootstrap cannot stall the retry loop.
+RETRY_INITIAL_DELAY_S = 5
+RETRY_MAX_DELAY_S = 300
+START_TIMEOUT_S = 30
+
+_connect_task: asyncio.Task | None = None
+
 
 def _build_ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=settings.kafka_ssl_ca_path)
 
 
-async def start_kafka_producer() -> None:
+async def _connect_with_retry() -> None:
     global _producer
+
+    delay = RETRY_INITIAL_DELAY_S
+    attempt = 0
+
+    while True:
+        attempt += 1
+        producer = None
+        try:
+            producer = AIOKafkaProducer(
+                bootstrap_servers=settings.kafka_bootstrap_servers,
+                security_protocol="SASL_SSL",
+                sasl_mechanism="PLAIN",
+                sasl_plain_username=settings.kafka_username,
+                sasl_plain_password=settings.kafka_password,
+                ssl_context=_build_ssl_context(),
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            )
+            await asyncio.wait_for(producer.start(), timeout=START_TIMEOUT_S)
+            _producer = producer
+            logger.info("kafka_producer_started", extra={"attempt": attempt})
+            return
+        except Exception as exc:
+            # Kafka being unreachable (cluster paused, wrong creds, missing
+            # cert, network) must not take the API down: keep serving and
+            # retry in the background.
+            logger.warning(
+                "kafka_producer_start_failed",
+                extra={"attempt": attempt, "retry_in_s": delay, "error": repr(exc)},
+            )
+            if producer is not None:
+                # A failed start can leave the client half-open
+                try:
+                    await producer.stop()
+                except Exception:
+                    pass
+
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, RETRY_MAX_DELAY_S)
+
+
+def is_producer_started() -> bool:
+    return _producer is not None
+
+
+async def start_kafka_producer() -> None:
+    """Start connecting in the background, so app startup never waits on Kafka."""
+    global _connect_task
 
     if not settings.kafka_bootstrap_servers:
         logger.warning("kafka_producer_disabled", extra={"reason": "no bootstrap servers configured"})
         return
 
-    try:
-        producer = AIOKafkaProducer(
-            bootstrap_servers=settings.kafka_bootstrap_servers,
-            security_protocol="SASL_SSL",
-            sasl_mechanism="PLAIN",
-            sasl_plain_username=settings.kafka_username,
-            sasl_plain_password=settings.kafka_password,
-            ssl_context=_build_ssl_context(),
-            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-        )
-        await producer.start()
-        _producer = producer
-        logger.info("kafka_producer_started")
-    except Exception:
-        # Kafka being unreachable (cluster paused, wrong creds, missing cert,
-        # network) must not take the whole API down - the app should still
-        # start, just without event publishing until this is fixed.
-        logger.exception("kafka_producer_start_failed")
-        _producer = None
+    if _connect_task is None or _connect_task.done():
+        _connect_task = asyncio.create_task(_connect_with_retry())
 
 
 async def stop_kafka_producer() -> None:
-    global _producer
+    global _producer, _connect_task
+
+    if _connect_task is not None:
+        _connect_task.cancel()
+        try:
+            await _connect_task
+        except asyncio.CancelledError:
+            pass
+        _connect_task = None
 
     if _producer is not None:
         await _producer.stop()
