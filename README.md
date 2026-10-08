@@ -176,6 +176,8 @@ Every published message shares the same envelope:
 - The CA certificate is provided to Render as a Secret File; its path goes in `KAFKA_SSL_CA_PATH`
 - The worker claims one row at a time with `FOR UPDATE SKIP LOCKED`, so two replicas never publish the same row
 - A row is never marked published when Kafka is down: it stays in the outbox and is retried on the next poll
+- The API starts and serves requests even when Kafka is down: the producer reconnects in the background with backoff (5 s, doubling up to 5 min), logging a warning on each failed attempt
+- While the producer is not connected, the outbox worker skips its pass without touching the rows, so events wait in the outbox and nothing is lost
 - At-least-once delivery: a row can be sent again if the worker stops between the broker ack and the commit. `event_id` is the outbox row id, so consumers can dedupe on it
 - Local development without Kafka: if `KAFKA_BOOTSTRAP_SERVERS` is empty, the producer stays off and events wait in the outbox until Kafka is available
 
