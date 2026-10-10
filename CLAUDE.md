@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Kit rules (the guard reads these lines, so edits ask for approval)
 Project: Warehouse Operations Service (System 1): order lifecycle API and admin UI for a warehouse, used by operators and by Warehouse Intelligence. FastAPI, SQLAlchemy, Alembic, Postgres (Supabase, RLS on), JWT roles admin, operator, service, transactional outbox to Kafka (Aiven), React frontend.
-Focus now: confirm the Render deploy (kafka_producer_started in the logs), then check events on the Kafka topic with a consumer.
+Focus now: check events on the Kafka topic with a consumer.
 Critical (ask before every change): Backend/app/services/orders_service.py, Backend/app/services/outbox_service.py, Backend/app/services/kafka_producer.py, Backend/app/services/auth.py, Backend/app/services/refresh_tokens.py, Backend/app/core/security.py, Backend/app/core/rbac.py, Backend/app/core/config.py, Backend/app/api/routes/auth.py, Backend/app/api/routes/integrations.py, Backend/app/main.py
 Database files: Backend/app/models/, Backend/alembic/
 Databases: the local env file may point to the production Supabase database, so anything that touches the database (tests, scripts, migrations) runs only in CI, never locally.
