@@ -24,3 +24,10 @@
 ## 2026-10-10 System 1 complete
 - Done: System 1 confirmed end to end: outbox row published by the worker, kafka_producer_started and kafka_event_published in the Render logs, event visible on wms.order.audit in the Aiven console. PR #11 (README testing strategy) and PR #12 (kafka-test endpoint removed, CI 54 passed) merged.
 - Next step: work continues in warehouse-intelligence.
+
+## 2026-10-10 Handoff: System 1 closed, docs cleaned up
+- Done: README testing strategy grouped by area, 54 tests, em dashes removed (PR #11, fa7e6c61). POST /ops/kafka-test and its unused imports removed (PR #12, 2c35e216, CI 54 passed). Render deploy of #5, migration c7d2e9a4b310 and the event on wms.order.audit (Aiven console) all confirmed by the user. CLAUDE.md: Focus now set to "System 1 complete; work continues in warehouse-intelligence", kafka-test and consumer-check notes removed (cf093892).
+- State: on main, in sync with origin, nothing uncommitted. No failing tests.
+- Decisions taken by the user: README edits through the Edit tool only; commit and PR texts avoid mentioning env files; docs commits go straight to main, code changes through a PR merged on green CI.
+- Open questions: guard [SECRETS] hook blocks inline scripts and commands whose text mentions env files (false positive, pattern still unknown).
+- Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md; this repo (System 1) is the system it builds on.
