@@ -324,6 +324,7 @@ GitHub Actions runs automatically on push and pull request:
   - `422` — `reference` missing
 - `POST /integrations/orders/{order_id}/reserve`: a `409` (insufficient stock) moves the order to `FAILED_RESERVATION`
 - `POST /integrations/orders/{order_id}/release`: also accepts `NEW` orders (cancelled without restock)
+- Schema snapshot: CI exports the database structure to JSON (`Backend/scripts/export_schema.py`) and uploads it as the `schema-snapshot` artifact on pushes to `main` and on PRs
 
 ### User Management (admin only)
 - `GET /users`
