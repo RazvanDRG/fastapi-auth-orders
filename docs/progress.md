@@ -20,3 +20,7 @@
 - Decisions taken by the user: archive worker fix added to PR #5 as a second commit; docs-only PRs merge on green Vercel checks; CLAUDE.md "Event-driven work in progress" section (stale) gets updated together with the workflow-files commit, not before.
 - Open questions: guard hook blocked a commit+push+gh pr create command with [SECRETS] (likely false positive, pattern unknown; user ran commit/push by hand). Render deploy of #5: resolved 2026-10-10, Render logs show kafka_producer_started attempt=1 and kafka_event_published topic=wms.order.audit. Render deploy of migration c7d2e9a4b310: resolved 2026-10-10, SELECT version_num FROM alembic_version on production returns c7d2e9a4b310. POST /ops/kafka-test: resolved 2026-10-10, endpoint removed in PR #12.
 - Next step: System 1 done; next: check events on wms.order.audit in the Aiven console, then start Warehouse Intelligence
+
+## 2026-10-10 System 1 complete
+- Done: System 1 confirmed end to end: outbox row published by the worker, kafka_producer_started and kafka_event_published in the Render logs, event visible on wms.order.audit in the Aiven console. PR #11 (README testing strategy) and PR #12 (kafka-test endpoint removed, CI 54 passed) merged.
+- Next step: work continues in warehouse-intelligence.
