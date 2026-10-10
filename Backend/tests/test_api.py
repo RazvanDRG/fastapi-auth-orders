@@ -1288,6 +1288,46 @@ def test_integration_events_show_unpublished_outbox_rows():
         db.close()
 
 
+def test_integration_events_equal_timestamps_are_paged_without_skips_or_repeats():
+    wait_api()
+    svc_token = _service_token()
+    product_id = ensure_test_product()
+    order_id = create_integration_order(svc_token, product_id, 1)
+
+    # A shared timestamp in the future isolates these rows from any others.
+    same_time = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+
+    db = SessionLocal()
+    row_ids = []
+    try:
+        for _ in range(5):
+            row = OutboxEvent(
+                event_type="wms.order.audit",
+                order_id=order_id,
+                payload=json.dumps({"test": True}),
+                occurred_at=same_time,
+            )
+            db.add(row)
+            db.commit()
+            row_ids.append(row.id)
+
+        # limit=2 makes several page boundaries fall between equal timestamps.
+        events = _collect_pages("/integrations/events", svc_token, {"since": same_time.isoformat(), "limit": 2})
+        ids = [uuid.UUID(event["event_id"]) for event in events]
+
+        # Every row exactly once, tie broken by event_id ascending.
+        assert ids == sorted(row_ids)
+        assert all(event["occurred_at"] == events[0]["occurred_at"] for event in events)
+
+        r = httpx.get(f"{BASE_URL}/integrations/events", headers=auth_headers(svc_token), params={"limit": 101}, timeout=10)
+        assert r.status_code == 422, r.text
+    finally:
+        db.rollback()
+        if row_ids:
+            db.query(OutboxEvent).filter(OutboxEvent.id.in_(row_ids)).delete(synchronize_session=False)
+            db.commit()
+        db.close()
+
 def test_integration_list_products_shape():
     wait_api()
     svc_token = _service_token()
