@@ -17,7 +17,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 - End-to-end order workflow
 - Role-Based Access Control (RBAC)
 - Transaction-safe stock handling
-- Full integration test coverage
+- Integration tests for every endpoint and workflow
 - CI/CD with GitHub Actions
 
 ---
@@ -27,7 +27,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 **Backend**
 - FastAPI, SQLAlchemy, PostgreSQL (hosted on Supabase), Alembic
 - Docker / Docker Compose
-- Pytest (40 integration tests)
+- Pytest (54 tests, run in CI)
 - GitHub Actions (CI)
 
 **Frontend**
@@ -49,7 +49,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 - Stock reservation with transactional safety (FOR UPDATE locking)
 - Idempotent operations (retry-safe endpoints)
 - Audit trail for all state transitions
-- Background archive worker — completed orders archived after 5 minutes (async)
+- Background archive worker: completed orders archived after 5 minutes (async)
 - Product and inventory management with stock history
 
 ### Authentication & Security
@@ -91,7 +91,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 **Orders Workspace**
 - Product catalog with search by name, SKU, or ID
 - Quantity selector per product and one-click order creation
-- "Load and operate" panel — fetch any order by ID and execute lifecycle transitions
+- "Load and operate" panel: fetch any order by ID and execute lifecycle transitions
 - My orders view with status badges (color-coded), item preview, and last activity timestamp
 - Order stats summary (Active / New / In progress)
 - Toggle between active and archived orders
@@ -157,7 +157,7 @@ Response (JSON)
 
 ## 📨 Event Publishing
 
-Order lifecycle changes are published to Kafka (Aiven, SASL_SSL) via a transactional outbox: each event is written to an `outbox_events` table in the same DB transaction as the business change it describes (create, reserve, release, pick), and a background worker polls unpublished rows and publishes them to Kafka — so an event only ever exists if its transaction actually committed, and nothing is lost if the worker crashes mid-pass.
+Order lifecycle changes are published to Kafka (Aiven, SASL_SSL) via a transactional outbox: each event is written to an `outbox_events` table in the same DB transaction as the business change it describes (create, reserve, release, pick), and a background worker polls unpublished rows and publishes them to Kafka, so an event only ever exists if its transaction actually committed, and nothing is lost if the worker crashes mid-pass.
 
 Every published message shares the same envelope:
 
@@ -185,7 +185,7 @@ Every published message shares the same envelope:
 
 The topic name equals `event_type`. There are four topics:
 
-**`wms.order.audit`** — mirrors every `OrderEvent` audit row (`{action, from_status, to_status, actor_role}`), written on order creation and on every status transition (reserve, start-pick, confirm-pick, ship, cancel, failed reservation).
+**`wms.order.audit`**: mirrors every `OrderEvent` audit row (`{action, from_status, to_status, actor_role}`), written on order creation and on every status transition (reserve, start-pick, confirm-pick, ship, cancel, failed reservation).
 
 ```json
 {
@@ -198,7 +198,7 @@ The topic name equals `event_type`. There are four topics:
 }
 ```
 
-**`wms.stock.reserved`** — emitted when stock is successfully reserved for an order.
+**`wms.stock.reserved`**: emitted when stock is successfully reserved for an order.
 
 ```json
 {
@@ -211,7 +211,7 @@ The topic name equals `event_type`. There are four topics:
 }
 ```
 
-**`wms.stock.released`** — emitted when previously reserved stock is returned to inventory (e.g. order cancelled after reservation).
+**`wms.stock.released`**: emitted when previously reserved stock is returned to inventory (e.g. order cancelled after reservation).
 
 ```json
 {
@@ -224,7 +224,7 @@ The topic name equals `event_type`. There are four topics:
 }
 ```
 
-**`wms.pick.completed`** — emitted when an order's items are confirmed picked.
+**`wms.pick.completed`**: emitted when an order's items are confirmed picked.
 
 ```json
 {
@@ -288,10 +288,10 @@ GitHub Actions runs automatically on push and pull request:
 ## 📋 API Endpoints
 
 ### Ops
-- `GET /ops/live` — Liveness probe
-- `GET /ops/ready` — Readiness probe (DB)
-- `GET /ops/activity` — Recent activity feed
-- `POST /ops/archive-orders` — Archive completed orders
+- `GET /ops/live`: Liveness probe
+- `GET /ops/ready`: Readiness probe (DB)
+- `GET /ops/activity`: Recent activity feed
+- `POST /ops/archive-orders`: Archive completed orders
 
 ### Auth
 - `POST /auth/register`
@@ -305,7 +305,7 @@ GitHub Actions runs automatically on push and pull request:
 
 ### Orders
 - `POST /orders`
-- `GET /orders/products` — List products
+- `GET /orders/products`: List products
 - `GET /orders/{order_id}`
 - `GET /orders/my`
 - `GET /orders/{order_id}/events`
@@ -317,11 +317,11 @@ GitHub Actions runs automatically on push and pull request:
 - `POST /orders/{order_id}/cancel`
 
 ### Integrations (service only)
-- `POST /integrations/orders` — Create order. `source_company` and `reference` are required and act as an idempotency key:
-  - `201 Created` — new order
-  - `200 OK` — retry with the same `(source_company, reference)` and the same items; returns the existing order, nothing new is written
-  - `409 Conflict` — same `(source_company, reference)` with different items
-  - `422` — `reference` missing
+- `POST /integrations/orders`: Create order. `source_company` and `reference` are required and act as an idempotency key:
+  - `201 Created`: new order
+  - `200 OK`: retry with the same `(source_company, reference)` and the same items; returns the existing order, nothing new is written
+  - `409 Conflict`: same `(source_company, reference)` with different items
+  - `422`: `reference` missing
 - `POST /integrations/orders/{order_id}/reserve`: a `409` (insufficient stock) moves the order to `FAILED_RESERVATION`
 - `POST /integrations/orders/{order_id}/release`: also accepts `NEW` orders (cancelled without restock)
 - `GET /integrations/orders`: orders newest first, filterable by `status` and `updated_since`
@@ -333,7 +333,7 @@ GitHub Actions runs automatically on push and pull request:
 
 ### User Management (admin only)
 - `GET /users`
-- `PATCH /users/{user_id}/profile` — Update user profile
+- `PATCH /users/{user_id}/profile`: Update user profile
 - `DELETE /users/{user_id}`
 - `PATCH /users/{user_id}/role`
 
@@ -375,48 +375,23 @@ GitHub Actions runs automatically on push and pull request:
 
 ---
 
-## 🧪 Testing Strategy (40 tests)
+## 🧪 Testing Strategy
 
-1. Health endpoints (`/ops/live`, `/ops/ready`)
-2. Authentication flow + `/auth/me` requires token
-3. Order lifecycle happy path (Create → Reserve → Pick → Ship)
-4. Invalid order transitions return 409
-5. RBAC — service role restrictions
-6. RBAC — operator cannot access admin endpoints
-7. Soft delete — deleted users cannot log in
-8. Admin safety constraint — cannot delete last active admin
-9. Registration with optional profile fields
-10. Forgot password — generic response for existing/unknown email
-11. Forgot password — creates reset code for existing user
-12. Reset password — valid code updates password + revokes refresh tokens
-13. Reset password — wrong code increments attempt count
-14. Reset password — mismatched passwords return 400
-15. Reset password — expired code returns 400
-16. Reset password — new password must differ from current
-17. User role audit event on role update
-18. User soft delete audit event
-19. Outbox row stays unpublished when the Kafka producer is not started
-20. Integration reserve with insufficient stock moves the order to `FAILED_RESERVATION`
-21. Integration release on a `NEW` order cancels without restock
-22. Repeated integration reserve 409 keeps `FAILED_RESERVATION` without a new audit row
-23. Integration order retry returns the same order
-24. Same reference with different items returns 409
-25. UI orders with the same reference are not deduplicated
-26. Integration order without reference returns 422
-27. Concurrent integration retries create one order
-28. `/auth/test-email` is removed
-29. Forgot password sends exactly one email
-30. Repeated retry-reserve 409 returns insufficient stock
-31. Rate limit: login over the limit returns 429 with `Retry-After`
-32. Rate limit: the window resets
-33. Rate limit: different IPs do not share counters
-34. Rate limit: falls back to the client host without the IP header
-35. Rate limit: a forged `X-Forwarded-For` does not change the key
-36. Rate limit: the IP header name comes from settings
-37. Rate limit: a 429 logs the client IP
-38. Rate limit: forgot-password over the limit returns 429
-39. Rate limit: order creation is limited per user
-40. Rate limit: integration order creation over the limit returns 429
+54 tests, run in CI on every push and pull request.
+
+- **Health and auth:** `/ops/live` and `/ops/ready`, `/auth/me` requires a token, registration with optional profile fields
+- **Password reset:** generic response for unknown emails, exactly one email sent, valid code revokes refresh tokens, wrong code, mismatched and expired codes, new password must differ
+- **RBAC and admin safety:** service and operator restrictions, soft-deleted users cannot log in, the last active admin cannot be deleted, audit rows for role changes and soft deletes
+- **Order lifecycle:** happy path (create, reserve, pick, ship), invalid transitions return 409
+- **Integration orders:** idempotency on `(source_company, reference)` (retry returns the same order, different items return 409, concurrent retries create one order), insufficient stock moves the order to `FAILED_RESERVATION`, release on `NEW` cancels without restock
+- **Read endpoints:** service role only, filters, cursor pagination with no skips or repeats on equal timestamps, unpublished outbox rows visible
+- **Rate limiting:** 429 with `Retry-After`, window reset, per-IP and per-user keys, forged `X-Forwarded-For` ignored, client IP logged
+- **Kafka resilience:** the outbox waits while the producer is down, the producer connects after failed attempts, DB work in the workers runs off the event loop
+- **Schema export:** the snapshot contains the known structure and is deterministic
+
+### How tests run
+
+The suite runs against the Postgres container from `docker-compose.yml` (`.env.example` points to it). `tests/test_kafka_resilience.py` needs no database. The schema export tests run only when `SCHEMA_EXPORT_TEST=1` (set in CI). Never run the suite with a `.env` that points to a real database: the tests create and delete data.
 
 ---
 
@@ -430,7 +405,7 @@ GitHub Actions runs automatically on push and pull request:
 
 ## 👤 About
 
-Built solo by **Razvan-Gabriel Dornea** — Backend Developer (Python/FastAPI), 
+Built solo by **Razvan-Gabriel Dornea**, Backend Developer (Python/FastAPI), 
 also built the React frontend end-to-end for this project.
 
 - LinkedIn: [linkedin.com/in/razvan-gabriel-dornea-697579184](https://www.linkedin.com/in/razvan-gabriel-dornea-697579184/)
