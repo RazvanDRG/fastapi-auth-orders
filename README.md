@@ -324,6 +324,11 @@ GitHub Actions runs automatically on push and pull request:
   - `422` — `reference` missing
 - `POST /integrations/orders/{order_id}/reserve`: a `409` (insufficient stock) moves the order to `FAILED_RESERVATION`
 - `POST /integrations/orders/{order_id}/release`: also accepts `NEW` orders (cancelled without restock)
+- `GET /integrations/orders`: orders newest first, filterable by `status` and `updated_since`
+- `GET /integrations/orders/{order_id}`: one order with its items and status history
+- `GET /integrations/events`: outbox events oldest first, filterable by `since` and `published`
+- `GET /integrations/products`: product catalog with current stock
+- The `GET` endpoints are read-only and service role only. The two list endpoints (`/orders`, `/events`) are cursor-paginated (`limit` up to 100, `cursor` set to the previous page's `next_cursor`). Responses carry no personal data (no user emails or names).
 - Schema snapshot: CI exports the database structure to JSON (`Backend/scripts/export_schema.py`) and uploads it as the `schema-snapshot` artifact on pushes to `main` and on PRs
 
 ### User Management (admin only)
