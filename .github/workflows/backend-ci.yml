@@ -34,8 +34,19 @@ jobs:
       - name: Run Alembic migrations
         run: docker compose run --rm api alembic upgrade head
 
+      - name: Export schema snapshot
+        run: docker compose exec -T api python scripts/export_schema.py --output schema_snapshot.json
+
+      - name: Upload schema snapshot
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-snapshot
+          path: Backend/schema_snapshot.json
+          if-no-files-found: error
+
       - name: Run tests
-        run: docker compose exec -T api pytest -q
+        run: docker compose exec -T -e SCHEMA_EXPORT_TEST=1 api pytest -q
 
       - name: Show logs on failure
         if: failure()
