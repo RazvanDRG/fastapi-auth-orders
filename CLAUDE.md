@@ -83,7 +83,7 @@ CI (`.github/workflows/`, triggers only on `Backend/**` changes): builds the com
 - **Kafka resilience.** `services/kafka_producer.py` (aiokafka, SASL_SSL to Aiven) connects in a background task with backoff (5s doubling to 5 min, 30s per attempt), logging `kafka_producer_start_failed` per attempt and `kafka_producer_started` on success. With no producer, an outbox pass returns at once and rows stay pending. Covered by `Backend/tests/test_kafka_resilience.py` (in-process, fake session and fake Kafka).
 - **Read endpoints (service role).** `GET /integrations/orders`, `/integrations/orders/{id}`, `/integrations/events`, `/integrations/products`: read-only, list endpoints cursor-paginated, no personal data (`schemas/integrations.py`).
 - **Schema export.** CI runs `Backend/scripts/export_schema.py` and uploads the `schema-snapshot` artifact.
-- **Still open.** Events not yet confirmed on the topic with a consumer. `POST /ops/kafka-test` is a temporary sanity-check endpoint, still present.
+- **Still open.** Events not yet confirmed on the topic with a consumer.
 
 ## Frontend architecture
 
