@@ -38,3 +38,10 @@
 - Decisions taken by the user: the outbox test without a Kafka producer lives in test_integrations.py (it needs the API and the database); merge commits for PRs; branch deleted after merge.
 - Open questions: local Backend/venv lacks aiokafka and pip cannot reach PyPI (SSL certificate check fails), so local pytest --collect-only only works with a throwaway stub on PYTHONPATH.
 - Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md.
+
+## 2026-10-13 upload-artifact bumped to v7 (Node 24)
+- Done: .github/workflows/backend-ci.yml uses actions/upload-artifact@v7 (was v4, Node 20). Release notes v5 to v7 checked: Node 24 runtime (runner >= 2.327.1, hosted runners fine), ESM packaging, new `archive` input defaulting to true; none affect our step (name schema-snapshot, path, if-no-files-found). actions/checkout@v6 already Node 24. PR #15 merged (cda44ac8); CI on main 54 passed, schema-snapshot uploaded (2836 bytes), no Node.js 20 warning. Previous handoff committed as 22806b75.
+- State: on main, in sync with origin; only this entry is uncommitted. No failing tests.
+- Decisions taken by the user: merge commit for PR #15, branch deleted after merge; handoff notes committed straight to main.
+- Open questions: CI notice says ubuntu-latest moves to Ubuntu 26 from 2026-10-19; watch the first CI run after that date.
+- Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md.
