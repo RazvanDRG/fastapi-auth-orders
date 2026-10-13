@@ -32,7 +32,7 @@ docker compose up --build            # start db + api (api runs `alembic upgrade
 docker compose down
 docker compose exec api alembic upgrade head    # apply migrations manually
 docker compose exec api pytest -q               # full test suite (needs api + db up)
-docker compose exec api pytest -q tests/test_api.py::test_happy_path_order_flow_operator   # single test
+docker compose exec api pytest -q tests/test_orders.py::test_happy_path_order_flow_operator   # single test
 docker compose run --rm api alembic revision -m "msg" --autogenerate
 docker compose logs api --tail=200
 ```

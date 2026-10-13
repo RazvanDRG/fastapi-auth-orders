@@ -379,15 +379,17 @@ GitHub Actions runs automatically on push and pull request:
 
 54 tests, run in CI on every push and pull request.
 
-- **Health and auth (tests 1-4):** `/ops/live` and `/ops/ready`, `/auth/me` requires a token, registration with optional profile fields, `/auth/test-email` is removed
-- **Password reset (tests 5-12):** generic response for unknown emails, a reset code is created, exactly one email sent, valid code revokes refresh tokens, wrong code, mismatched and expired codes, new password must differ
-- **RBAC and admin safety (tests 13-18):** service and operator restrictions, soft-deleted users cannot log in, the last active admin cannot be deleted, audit rows for role changes and soft deletes
-- **Order lifecycle (tests 19-21):** happy path (create, reserve, pick, ship), invalid transitions return 409, repeated retry-reserve with no stock returns 409
-- **Integration orders (tests 22-29):** idempotency on `(source_company, reference)` (retry returns the same order, different items return 409, concurrent retries create one order, missing reference returns 422, UI orders are not deduplicated), insufficient stock moves the order to `FAILED_RESERVATION` and a repeat adds no new audit row, release on `NEW` cancels without restock
-- **Read endpoints (tests 30-36):** service role only, filters, cursor pagination with no skips or repeats on equal timestamps, unpublished outbox rows visible
-- **Rate limiting (tests 37-46):** 429 with `Retry-After`, window reset, per-IP and per-user keys, forged `X-Forwarded-For` ignored, client IP logged
-- **Kafka resilience (tests 47-52):** the outbox waits while the producer is down, the producer connects after failed attempts, DB work in the workers runs off the event loop, log lines carry their extra fields
-- **Schema export (tests 53-54):** the snapshot contains the known structure and is deterministic
+- **Health and auth (`tests/test_auth.py`):** `/ops/live` and `/ops/ready`, `/auth/me` requires a token, registration with optional profile fields, `/auth/test-email` is removed
+- **Password reset (`tests/test_password_reset.py`):** generic response for unknown emails, a reset code is created, exactly one email sent, valid code revokes refresh tokens, wrong code, mismatched and expired codes, new password must differ
+- **RBAC and admin safety (`tests/test_rbac.py`):** service and operator restrictions, soft-deleted users cannot log in, the last active admin cannot be deleted, audit rows for role changes and soft deletes
+- **Order lifecycle (`tests/test_orders.py`):** happy path (create, reserve, pick, ship), invalid transitions return 409, repeated retry-reserve with no stock returns 409
+- **Integration orders (`tests/test_integrations.py`):** idempotency on `(source_company, reference)` (retry returns the same order, different items return 409, concurrent retries create one order, missing reference returns 422, UI orders are not deduplicated), insufficient stock moves the order to `FAILED_RESERVATION` and a repeat adds no new audit row, release on `NEW` cancels without restock, an outbox row stays unpublished when the Kafka producer is not started
+- **Read endpoints (`tests/test_read_endpoints.py`):** service role only, filters, cursor pagination with no skips or repeats on equal timestamps, unpublished outbox rows visible
+- **Rate limiting (`tests/test_rate_limit.py`):** 429 with `Retry-After`, window reset, per-IP and per-user keys, forged `X-Forwarded-For` ignored, client IP logged
+- **Kafka resilience (`tests/test_kafka_resilience.py`):** the outbox waits while the producer is down, the producer connects after failed attempts, DB work in the workers runs off the event loop, log lines carry their extra fields
+- **Schema export (`tests/test_schema_export.py`):** the snapshot contains the known structure and is deterministic
+
+Shared helpers and test accounts live in `tests/helpers.py`.
 
 ### How tests run
 

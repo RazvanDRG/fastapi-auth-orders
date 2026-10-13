@@ -9,7 +9,7 @@ from app.core.rate_limit import limiter
 from app.core.roles import Roles
 from app.main import app
 from app.services.auth import create_access_token
-from tests.test_api import (
+from tests.helpers import (
     OP_EMAIL,
     OP_PASS,
     SVC_EMAIL,
