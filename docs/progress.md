@@ -31,3 +31,10 @@
 - Decisions taken by the user: README edits through the Edit tool only; commit and PR texts avoid mentioning env files; docs commits go straight to main, code changes through a PR merged on green CI.
 - Open questions: guard [SECRETS] hook blocks inline scripts and commands whose text mentions env files (false positive, pattern still unknown).
 - Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md; this repo (System 1) is the system it builds on.
+
+## 2026-10-13 Tests split by area
+- Done: Backend/tests/test_api.py split into helpers.py, test_auth.py, test_password_reset.py, test_rbac.py, test_orders.py, test_integrations.py, test_read_endpoints.py; test bodies unchanged (AST check, 59 of 59 blocks identical). test_rate_limit.py imports from tests.helpers. README Testing Strategy names each group's file; CLAUDE.md single-test example points at test_orders.py. PR #14 merged (603c35e4), CI 54 passed.
+- State: on main, in sync with origin; only this progress entry is uncommitted. No failing tests.
+- Decisions taken by the user: the outbox test without a Kafka producer lives in test_integrations.py (it needs the API and the database); merge commits for PRs; branch deleted after merge.
+- Open questions: local Backend/venv lacks aiokafka and pip cannot reach PyPI (SSL certificate check fails), so local pytest --collect-only only works with a throwaway stub on PYTHONPATH.
+- Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md.
