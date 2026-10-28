@@ -108,7 +108,7 @@ def reserve_stock_for_order(db: Session, order_id: int) -> dict[int, Product]:
 
     # LOCK products to avoid race conditions
     products = (
-        db.execute(select(Product).where(Product.id.in_(product_ids)).with_for_update())
+        db.execute(select(Product).where(Product.id.in_(product_ids)).order_by(Product.id).with_for_update())
         .scalars()
         .all()
     )
@@ -145,7 +145,7 @@ def restock_for_order(db: Session, order_id: int) -> dict[int, Product]:
     product_ids = sorted({it.product_id for it in items})
 
     products = (
-        db.execute(select(Product).where(Product.id.in_(product_ids)).with_for_update())
+        db.execute(select(Product).where(Product.id.in_(product_ids)).order_by(Product.id).with_for_update())
         .scalars()
         .all()
     )
@@ -161,7 +161,23 @@ def restock_for_order(db: Session, order_id: int) -> dict[int, Product]:
 
 
 def get_order(db: Session, order_id: int) -> Order:
-    order = db.query(Order).filter(Order.id == order_id).first()
+    return _load_order(db, order_id, lock=False)
+
+
+def get_order_for_update(db: Session, order_id: int) -> Order:
+    """
+    Same as get_order, but locks the order row (FOR UPDATE) until the caller
+    commits or rolls back, so two requests can't both pass the same status
+    check. Lock order is always: order row first, then product rows by id.
+    """
+    return _load_order(db, order_id, lock=True)
+
+
+def _load_order(db: Session, order_id: int, lock: bool) -> Order:
+    query = db.query(Order).filter(Order.id == order_id)
+    if lock:
+        query = query.with_for_update()
+    order = query.first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -231,7 +247,7 @@ def transition(
 
 
 def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.RESERVED:
         return order
@@ -256,7 +272,7 @@ def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str |
         db.rollback()
 
         if e.status_code == 409:
-            order = get_order(db, order_id)
+            order = get_order_for_update(db, order_id)
             transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
             db.commit()
             db.refresh(order)
@@ -269,7 +285,7 @@ def reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str |
 
 
 def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.RESERVED:
         return order
@@ -298,7 +314,7 @@ def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id:
 
         # Already FAILED_RESERVATION: re-raise the stock 409 instead of an invalid self-transition
         if e.status_code == 409:
-            order = get_order(db, order_id)
+            order = get_order_for_update(db, order_id)
             if order.status != OrderStatus.FAILED_RESERVATION:
                 transition(db, order, OrderStatus.FAILED_RESERVATION, actor=actor, request_id=request_id)
                 db.commit()
@@ -312,7 +328,7 @@ def retry_reserve_order_flow(db: Session, order_id: int, actor=None, request_id:
 
 
 def start_pick_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.PICKING:
         return order
@@ -335,7 +351,7 @@ def start_pick_flow(db: Session, order_id: int, actor=None, request_id: str | No
 
 
 def confirm_pick_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.PICKED:
         return order
@@ -363,7 +379,7 @@ def confirm_pick_flow(db: Session, order_id: int, actor=None, request_id: str | 
 
 
 def ship_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.SHIPPED:
         return order
@@ -384,7 +400,7 @@ def ship_order_flow(db: Session, order_id: int, actor=None, request_id: str | No
 
 
 def cancel_order_flow(db: Session, order_id: int, actor=None, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
         return order
@@ -510,7 +526,7 @@ def _match_existing_service_order(db: Session, order: Order, payload: ServiceOrd
 
 
 def integration_reserve_flow(db: Session, order_id: int, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.RESERVED:
         return {"status": "RESERVED"}
@@ -532,7 +548,7 @@ def integration_reserve_flow(db: Session, order_id: int, request_id: str | None 
         # Same compensation as reserve_order_flow: persist the failure so the
         # caller can see it and release the order instead of leaving it NEW.
         if e.status_code == 409:
-            order = get_order(db, order_id)
+            order = get_order_for_update(db, order_id)
             if order.status != OrderStatus.FAILED_RESERVATION:
                 transition(db, order, OrderStatus.FAILED_RESERVATION, actor=None, request_id=request_id)
                 db.commit()
@@ -544,7 +560,7 @@ def integration_reserve_flow(db: Session, order_id: int, request_id: str | None 
 
 
 def integration_release_flow(db: Session, order_id: int, request_id: str | None = None):
-    order = get_order(db, order_id)
+    order = get_order_for_update(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
         return {"status": "CANCELLED"}

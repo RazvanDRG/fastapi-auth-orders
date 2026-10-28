@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -36,19 +36,32 @@ def issue_refresh_token(db: Session, user_id: int) -> str:
 
 def rotate_refresh_token(db: Session, raw_token: str) -> int:
     token_hash = _hash_token(raw_token)
-    rt = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    now = datetime.now(timezone.utc)
 
+    # One atomic UPDATE: of several concurrent refreshes with the same token,
+    # only the first matches the row; the rest wait on its row lock, then see
+    # revoked_at set and update 0 rows.
+    user_id = db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at >= now,
+        )
+        .values(revoked_at=now)
+        .returning(RefreshToken.user_id)
+    ).scalar_one_or_none()
+
+    if user_id is not None:
+        return user_id
+
+    # 0 rows: read only to pick the same message as before (D-001).
+    rt = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     if not rt:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
-
-    now = datetime.now(timezone.utc)
     if rt.revoked_at is not None:
         raise HTTPException(status_code=401, detail="Refresh token revoked")
-    if rt.expires_at < now:
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-
-    rt.revoked_at = now
-    return rt.user_id
+    raise HTTPException(status_code=401, detail="Refresh token expired")
 
 
 def revoke_refresh_token(db: Session, raw_token: str) -> None:
