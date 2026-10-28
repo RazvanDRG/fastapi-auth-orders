@@ -76,3 +76,4 @@ Frontend/node_modules/
 .claude/settings.local.json
 # Schema snapshot written by CI
 Backend/schema_snapshot.json
+.claude/current-task.json

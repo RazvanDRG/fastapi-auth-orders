@@ -27,7 +27,7 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 **Backend**
 - FastAPI, SQLAlchemy, PostgreSQL (hosted on Supabase), Alembic
 - Docker / Docker Compose
-- Pytest (54 tests, run in CI)
+- Pytest (57 tests, run in CI)
 - GitHub Actions (CI)
 
 **Frontend**
@@ -119,6 +119,8 @@ Order → Reserve → Start Pick → Confirm Pick → Ship
 
 - Service layer separates business logic from routes
 - FOR UPDATE locking prevents race conditions on stock reservation
+- Every order action locks the order row before checking its status, so simultaneous requests on one order take turns; products are locked in id order
+- A refresh token is used in one atomic update, so the same token sent twice at once works only once
 - DB trigger protects the last active admin as a final safeguard
 - Dedicated audit table for admin actions (role changes, soft deletes)
 - Archive worker runs as async background task on app lifespan
@@ -377,7 +379,7 @@ GitHub Actions runs automatically on push and pull request:
 
 ## 🧪 Testing Strategy
 
-54 tests, run in CI on every push and pull request.
+57 tests, run in CI on every push and pull request.
 
 - **Health and auth (`tests/test_auth.py`):** `/ops/live` and `/ops/ready`, `/auth/me` requires a token, registration with optional profile fields, `/auth/test-email` is removed
 - **Password reset (`tests/test_password_reset.py`):** generic response for unknown emails, a reset code is created, exactly one email sent, valid code revokes refresh tokens, wrong code, mismatched and expired codes, new password must differ
@@ -387,6 +389,7 @@ GitHub Actions runs automatically on push and pull request:
 - **Read endpoints (`tests/test_read_endpoints.py`):** service role only, filters, cursor pagination with no skips or repeats on equal timestamps, unpublished outbox rows visible
 - **Rate limiting (`tests/test_rate_limit.py`):** 429 with `Retry-After`, window reset, per-IP and per-user keys, forged `X-Forwarded-For` ignored, client IP logged
 - **Kafka resilience (`tests/test_kafka_resilience.py`):** the outbox waits while the producer is down, the producer connects after failed attempts, DB work in the workers runs off the event loop, log lines carry their extra fields
+- **Concurrency (`tests/test_concurrency.py`):** 10 identical requests at once, 5 rounds: reserve and cancel change stock exactly once, a refresh token works once (one 200, nine 401)
 - **Schema export (`tests/test_schema_export.py`):** the snapshot contains the known structure and is deterministic
 
 Shared helpers and test accounts live in `tests/helpers.py`.
@@ -402,6 +405,7 @@ The suite runs against the Postgres container from `docker-compose.yml` (`.env.e
 - Permission-based access control to replace hardcoded role checks
 - WebSocket / SSE for real-time dashboard updates
 - Email notifications for order state transitions
+- When two reserves on the same order both run out of stock, the second one answers "Invalid transition" instead of "Insufficient stock" (still 409, no data effect); add the same guard retry reserve already has
 
 ---
 
