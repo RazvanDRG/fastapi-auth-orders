@@ -45,3 +45,17 @@
 - Decisions taken by the user: merge commit for PR #15, branch deleted after merge; handoff notes committed straight to main.
 - Open questions: CI notice says ubuntu-latest moves to Ubuntu 26 from 2026-10-19; watch the first CI run after that date.
 - Next step: open a new session in the warehouse-intelligence repo and start from its CLAUDE.md.
+
+## 2026-10-29 T-001 race fixes merged (order locks, single-use refresh tokens)
+- Done: T-001 merged as PR #16 (merge commit 7829da37). Race tests were red on the old code (CI 40779664552: 3 failed, 54 passed), green after the fix (40780380106) and on the PR (40781664870): 57 passed. /task-review loop 1 evaluator FAIL (AC-5 wording, .gitignore scope), loop 2 evaluator PASS and risk PASS on 5bab9c07. Branch deleted here and on GitHub; .claude/current-task.json removed.
+- Changed:
+  - Backend: every order action locks the order row before checking its status, so simultaneous requests change stock once; product locks in id order (Backend/app/services/orders_service.py). A refresh token is used in one atomic UPDATE, so it works once; 401 messages unchanged (Backend/app/services/refresh_tokens.py)
+  - Frontend: none
+  - Database: none (no migration)
+  - Tests: 10 identical requests at once, 5 rounds: reserve and cancel change stock exactly once, one refresh 200 and nine 401 (Backend/tests/test_concurrency.py)
+  - Config/CI: .claude/current-task.json ignored by git (.gitignore)
+  - Docs: README (57 tests, concurrency tests, locking design, follow-up), task file (docs/tasks/T-001.md), D-001 (docs/decisions.md)
+- State: on main, in sync with origin; only this entry is uncommitted. No failing tests.
+- Decisions taken by the user: D-001 refresh token rejections keep their three messages; .gitignore and README added to T-001 scope; merge commit for PR #16.
+- Open questions: reserve_order_flow stock-failure branch (orders_service.py:275) lacks the FAILED_RESERVATION guard, so two reserves that both run out of stock can answer "Invalid transition" (409, no data effect; in README Future Improvements). The dev-kit guard denies a quoted ref glob (git branch --list with task/ plus a star) as a .env wildcard (secret_level in ~/.claude/dev-kit/hooks/guard.py ~line 440); it also blocked writing this note. The local Python has no project packages, so the local check (tests/test_kafka_resilience.py) cannot run.
+- Next step: in a dev-kit session, make secret_level skip quoted globs and globs with a folder part, with a test for that branch-list command (~/.claude/dev-kit/hooks/guard.py).
